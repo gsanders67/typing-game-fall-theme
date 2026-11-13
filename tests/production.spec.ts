@@ -8,6 +8,12 @@ test('Express serves the game and hash invites under a runtime base path', async
   });
 
   await page.goto('/event/#room=ABC234');
+  for (const icon of await page.locator('link[rel="icon"]').evaluateAll((icons) => icons.map((icon) => (icon as HTMLLinkElement).href))) {
+    expect(new URL(icon).pathname).toMatch(/^\/event\/favicon\.(svg|png)$/);
+    const response = await page.request.get(icon);
+    expect(response.ok()).toBe(true);
+    expect(response.headers()['content-type']).toMatch(/^image\//);
+  }
   await expect(page.getByLabel('Room code')).toHaveValue('ABC234');
   await page.getByRole('button', { name: 'Back to the campfire' }).click();
   await expect(page.getByRole('heading', { name: /Big fall energy/ })).toBeVisible();

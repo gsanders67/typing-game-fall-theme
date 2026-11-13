@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import { messageSchema } from './protocol';
+import { DURATION } from '../game/engine';
 
 it('rejects forged control actions, oversized bursts, invalid keys and timestamps', () => {
   const event = { seq: 1, at: 1000, key: 'a' };
@@ -10,6 +11,7 @@ it('rejects forged control actions, oversized bursts, invalid keys and timestamp
     { ...packet, events: Array.from({ length: 101 }, () => event) },
     { ...packet, events: [{ ...event, key: '<script>' }] },
     { ...packet, events: [{ ...event, at: -100 }] },
+    { ...packet, events: [{ ...event, at: DURATION + 1 }] },
     { ...packet, events: [{ ...event, seq: 1.5 }] },
   ]) expect(messageSchema.safeParse(invalid).success).toBe(false);
 });

@@ -1,12 +1,8 @@
-export const DURATION = 60_000;
+import { VOCABULARY } from './vocabulary';
+
+export const DURATION = 30_000;
 export const PRESETS = ['Acorn', 'Harvest', 'Bonfire', 'Final feast'] as const;
 export type Difficulty = (typeof PRESETS)[number];
-const WORDS = [
-  'leaf moss fern pine rain cozy glow camp gold bark wind game play team jump fox',
-  'autumn forest pumpkin harvest sweater bonfire console controller maple party victory',
-  'leaderboard achievement adventure multiplayer celebration championship wilderness',
-  'jump into fall|one more round|cozy by the fire|bring your best game|leaves on the breeze|teamwork makes magic|claim the crown|meet at the bonfire',
-];
 const CONFIG = [
   { interval: 1800, fall: 9500 },
   { interval: 1600, fall: 10000 },
@@ -54,6 +50,23 @@ export function randomAt(seed: number, index: number): number {
   value = Math.imul(value ^ (value >>> 15), 0x735a2d97);
   return ((value ^ (value >>> 15)) >>> 0) / 4294967296;
 }
+export function promptAt(seed: number, index: number, preset: Difficulty): string {
+  const pool = VOCABULARY[preset];
+  const cycle = Math.floor(index / pool.length);
+  const deck = (round: number) => {
+    const items = [...pool];
+    const shuffleSeed = hashSeed(`${seed}:prompts:${preset}:${round}`);
+    for (let i = items.length - 1; i > 0; i--) {
+      const j = Math.floor(randomAt(shuffleSeed, i) * (i + 1));
+      [items[i], items[j]] = [items[j], items[i]];
+    }
+    return items;
+  };
+  const items = deck(cycle);
+  // Keep the last entry untouched so the previous deck's boundary is reproducible.
+  if (cycle && items[0] === deck(cycle - 1).at(-1)) [items[0], items[1]] = [items[1], items[0]];
+  return items[index % pool.length];
+}
 export function newBoard(seed: string): Board {
   return {
     now: 0, seed: hashSeed(seed), spawned: 0, nextSpawn: 0, targets: [],
@@ -67,7 +80,7 @@ export function multiplier(streak: number): number {
 export function stats(board: Board): Stats {
   return {
     score: board.score,
-    wpm: Math.round(board.correct / 5),
+    wpm: Math.round(board.correct / 5 / (DURATION / 60_000)),
     accuracy: board.attempts ? Math.round((board.correct / board.attempts) * 100) : null,
     best: board.best,
   };
@@ -76,7 +89,6 @@ export function advance(board: Board, time: number, preset: Difficulty): void {
   if (board.ended) return;
   const until = Math.max(board.now, Math.min(time, DURATION));
   const config = CONFIG[PRESETS.indexOf(preset)];
-  const pool = preset === 'Final feast' ? WORDS[3].split('|') : WORDS[PRESETS.indexOf(preset)].split(' ');
   while (!board.ended) {
     const missAt = Math.min(...board.targets.map((target) => target.born + target.fall));
     const next = Math.min(until, missAt, board.nextSpawn < DURATION ? board.nextSpawn : Infinity);
@@ -85,7 +97,7 @@ export function advance(board: Board, time: number, preset: Difficulty): void {
       const id = board.spawned++;
       board.targets.push({
         id, born: board.nextSpawn, fall: config.fall,
-        text: pool[Math.floor(randomAt(board.seed, id * 2) * pool.length)],
+        text: promptAt(board.seed, id, preset),
         lane: randomAt(board.seed, id * 2 + 1),
       });
       board.nextSpawn += config.interval;

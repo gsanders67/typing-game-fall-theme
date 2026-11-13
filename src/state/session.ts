@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { advance, DURATION, input, newBoard, stats, type Board, type Difficulty } from '../game/engine';
 import {
-  defaultAvatar, draw, emptyRoom, finish, log, resolvePlayers, rollDice,
+  defaultAvatar, draw, emptyRoom, finish, log, resolvePlayers, rollDice, rollPodium,
   validateCheckpoint, type AvatarConfig, type Room,
 } from '../tournament/model';
 import { createTransport, type RoomTransport, type RoomConnection } from '../network/transport';
@@ -77,6 +77,10 @@ export class Session {
     if (restore) {
       const backup = backupSchema.parse(restore);
       this.room = validateCheckpoint(backup.room);
+      if (!this.room.rulesVersion && this.room.phase !== 'finished' && this.room.phase !== 'lobby') {
+        throw new Error('This unfinished backup uses legacy 60-second rules. Restore it with the previous app version or start a new event. Completed backups remain supported.');
+      }
+      if (this.room.phase === 'lobby') this.room.rulesVersion = 2;
       this.secrets = backup.secrets;
       if (this.room.players.some((player) => !this.secrets[player.id])) throw new Error('Backup lacks player reconnect credentials.');
       this.room.revision++;
@@ -84,7 +88,6 @@ export class Session {
       for (const match of this.room.matches) {
         if (match.status === 'playing' || match.status === 'scheduled' || match.status === 'arming') {
           match.status = 'pending'; match.startAt = 0; match.results = {}; match.rolls = [];
-          match.seed = crypto.randomUUID();
         }
       }
       log(this.room, 'Presenter restored checkpoint. Unfinished games require replay.');
@@ -409,9 +412,15 @@ export class Session {
     rollDice(this.room, match);
     this.persist();
   }
+  podiumDice() {
+    if (!this.room || this.snapshot.role !== 'host') throw new Error('Only the presenter can resolve podium ties.');
+    rollPodium(this.room);
+    this.persist();
+  }
   replay(id: string) {
     const room = this.room;
     if (!room) return;
+    if (!room.rulesVersion) throw new Error('Legacy results are read-only. Start a new event to use the 30-second rules.');
     const match = room.matches.find((item) => item.id === id);
     if (!match) return;
     const invalid = new Set([id]);
@@ -419,11 +428,12 @@ export class Session {
       if (item.sources.some((source) => invalid.has(source.replace('winner:', '')))) invalid.add(item.id);
     }
     room.revision++;
+    room.podiumRolls = [];
     // A revision is room-wide: stop all unfinished games so no client retains stale input.
     for (const item of room.matches) {
       if (invalid.has(item.id) || item.status === 'playing' || item.status === 'scheduled' || item.status === 'arming') {
         item.status = 'pending'; item.results = {}; item.rolls = []; item.winner = undefined;
-        item.startAt = 0; item.seed = crypto.randomUUID();
+        item.startAt = 0;
         item.players = item.round === 0 ? item.sources : [];
       }
     }

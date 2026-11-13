@@ -1,9 +1,10 @@
 import { z } from 'zod';
 import { avatarSchema } from '../tournament/model';
+import { DURATION } from '../game/engine';
 
 export const keyEventSchema = z.object({
   seq: z.number().int().positive().max(20000),
-  at: z.number().finite().min(0).max(60000),
+  at: z.number().finite().min(0).max(DURATION),
   key: z.string().regex(/^(Backspace|[a-zA-Z ])$/),
 });
 export type KeyEvent = z.infer<typeof keyEventSchema>;
