@@ -89,6 +89,73 @@
   .podium-step small { letter-spacing: 1px; font-size: 8px; }
   .podium-tie { flex-direction: column; align-items: stretch; }
 }
+.app:has(.showing-podium) { padding-top: 0; background: radial-gradient(ellipse at 50% 80%, #69753760, transparent 70%), #1b3226; }
+.room-main.showing-podium { width: 100%; max-width: none; padding: 0; margin: 0; gap: 0; }
+.showing-podium > .room-title { display: none; }
+.showing-podium > .results-navigation { align-items: center; min-height: 64px; padding: 12px max(120px, 12%) 12px 24px; border-bottom: 1px solid #edda8f20; }
+.app:has(.showing-podium) > .settings-menu { top: 16px; right: 24px; }
+.app:has(.showing-podium) > footer { width: 100%; padding: 0 24px; background: #14271f40; }
+.showing-podium .championship-results { flex: 1; display: flex; flex-direction: column; padding: clamp(18px, 3dvh, 36px) clamp(20px, 4vw, 72px) 18px; border: 0; border-radius: 0; background: none; }
+.showing-podium .podium-heading { width: 100%; max-width: 1440px; margin: 0 auto; align-items: center; }
+.showing-podium .podium-heading h2 { font-size: clamp(36px, 4.5vw, 64px); text-wrap: balance; }
+.showing-podium .podium-heading p { font-size: clamp(14px, 1.5vw, 20px); overflow-wrap: anywhere; }
+.showing-podium .podium-heading .eyebrow { margin-bottom: 10px; }
+.showing-podium .podium-actions > button { font-size: 12px; }
+.showing-podium .celebration-callout { margin: 16px 0 0; }
+.showing-podium .podium-stage { flex: 1 0 auto; display: grid; align-items: center; padding: 16px 0 8px; }
+.showing-podium .podium { width: min(1100px, 100%); max-width: none; gap: clamp(16px, 3vw, 44px); margin: 0 auto; }
+.showing-podium .podium-mascot { width: clamp(140px, 17vw, 240px); height: clamp(160px, 23dvh, 250px); }
+.showing-podium .podium-mascot .mascot-dancer { height: 85%; }
+.showing-podium .place-1 .podium-mascot .mascot-dancer { height: 100%; }
+.showing-podium .podium-mascot svg, .showing-podium .place-1 .podium-mascot svg { width: auto; height: 100%; }
+.showing-podium .champion-halo { width: 100%; height: auto; aspect-ratio: 1; top: 0; }
+.showing-podium .champion-sticker { top: 6px; right: -8px; font-size: 11px; }
+.showing-podium .podium-name { font-size: clamp(22px, 2.8vw, 36px); }
+.showing-podium .podium-place > span { font-size: 13px; }
+.showing-podium .podium-step b { font-size: clamp(42px, 6dvh, 70px); }
+.showing-podium .place-1 .podium-step { min-height: clamp(120px, 20dvh, 240px); }
+.showing-podium .place-2 .podium-step { min-height: clamp(88px, 15dvh, 180px); }
+.showing-podium .place-3 .podium-step { min-height: clamp(64px, 11dvh, 132px); }
+.showing-podium .podium-pending { width: min(380px, 100%); }
+.showing-podium .podium-tie, .showing-podium .podium-rolls { width: min(1100px, 100%); margin: 8px auto 0; flex: none; }
+@media (min-width: 761px) {
+  .showing-podium [data-pending="true"] .podium-heading h2 { font-size: clamp(32px, 3.2vw, 48px); }
+  .showing-podium [data-pending="true"] .podium-mascot { height: clamp(130px, 20dvh, 200px); }
+  .showing-podium [data-pending="true"] .place-1 .podium-step { min-height: clamp(100px, 15dvh, 180px); }
+}
+@media (max-height: 750px) and (min-width: 761px) {
+  .showing-podium .podium-mascot { height: 140px; }
+  .showing-podium .place-1 .podium-step { min-height: 125px; }
+}
+@media (max-width: 760px) {
+  .showing-podium > .results-navigation { padding: 12px 110px 12px 14px; gap: 8px; }
+  .showing-podium > .results-navigation > button { font-size: 10px; min-height: 36px; padding: 8px 10px; }
+  .app:has(.showing-podium) > .settings-menu { top: 14px; right: 14px; }
+  .app:has(.showing-podium) > footer { padding: 0 14px; }
+  .showing-podium .championship-results { padding: 18px 14px 12px; }
+  .showing-podium .podium-heading { gap: 12px; }
+  .showing-podium .podium-heading h2 { font-size: clamp(28px, 7.8vw, 44px); margin-bottom: 6px; }
+  .showing-podium .podium-heading p { font-size: 13px; }
+  .showing-podium .podium-heading .eyebrow { font-size: 8px; margin-bottom: 8px; }
+  .showing-podium .podium-actions { gap: 8px; }
+  .showing-podium .podium-actions > button { font-size: 11px; }
+  .showing-podium .celebration-callout { margin-top: 14px; }
+  .showing-podium .podium-stage { padding: 22px 0 10px; }
+  .showing-podium .podium { gap: 8px; }
+  .showing-podium .podium-mascot { width: 94px; height: 118px; }
+  .showing-podium .champion-halo { left: 0; }
+  .showing-podium .champion-sticker { font-size: 7px; top: 4px; right: -8px; }
+  .showing-podium .podium-name { font-size: 18px; }
+  .showing-podium .podium-place > span { font-size: 9px; margin-bottom: 10px; }
+  .showing-podium .podium-step b { font-size: 38px; }
+  .showing-podium .place-1 .podium-step { min-height: 120px; }
+  .showing-podium .place-2 .podium-step { min-height: 88px; }
+  .showing-podium .place-3 .podium-step { min-height: 64px; }
+  .showing-podium .podium-pending { width: min(260px, 100%); }
+  .showing-podium [data-pending="true"] .podium-stage { padding-top: 12px; }
+  .showing-podium [data-pending="true"] .podium-mascot { height: 100px; }
+  .showing-podium [data-pending="true"] .place-1 .podium-step { min-height: 86px; }
+}
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 360px; }
 button, summary { cursor: pointer; -webkit-tap-highlight-color: transparent; }

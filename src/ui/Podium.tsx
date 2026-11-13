@@ -20,7 +20,7 @@ export function Podium({ room, host, playerId, run }: { room: Room; host: boolea
   const pending = tied.length > 0;
   const visible = pending ? [champion] : standings.slice(0, 3);
   const order = [1, 0, 2].filter((index) => index < visible.length);
-  return <section className="championship-results" aria-label="Championship results" data-celebrating={!still}>
+  return <section className="championship-results" aria-label="Championship results" data-celebrating={!still} data-pending={pending}>
     <Celebration animated={!still}/>
     <div className="podium-heading"><div><div className="eyebrow">{EVENT_NAME}</div><h2>{pending ? 'A champion crowned. Podium places pending.' : 'Tiny paws. Huge victory!'}</h2><p>{AWARD_TITLE}: <strong>{champion.name}</strong></p></div>
       <div className="podium-actions">{!reduced && <Button className="secondary" aria-pressed={paused} onClick={() => setPaused(!paused)}>{paused ? 'Keep partying' : 'Pause party'}</Button>}
@@ -28,13 +28,12 @@ export function Podium({ room, host, playerId, run }: { room: Room; host: boolea
       </div>
     </div>
     <div className="celebration-callout"><span><Icon name="crown" size={18}/> GG, keyboard legends!</span><p>{champion.name} takes the crown. Victory wiggles all around!</p></div>
-    <div className={`podium ${pending ? 'podium-pending' : ''}`}>
+    <div className="podium-stage"><div className={`podium ${pending ? 'podium-pending' : ''}`}>
       {order.map((index) => {
         const player = visible[index];
         const result = room.matches.filter((match) => match.players.includes(player.id) && match.status === 'done').at(-1)?.results[player.id];
         return <motion.article key={player.id} className={`podium-place place-${index + 1}`} aria-label={`Place ${index + 1}: ${player.name}`}
-          initial={still ? false : { opacity: 0, y: 25 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: still ? 0 : index === 0 ? 1 : index === 1 ? .5 : 0, duration: .35 }}>
+          initial={false} animate={{ opacity: 1, y: 0 }}>
           <div className="podium-mascot">
             {index === 0 && <><span className="champion-halo" aria-hidden="true"/><span className="champion-sticker" aria-hidden="true">YOU DID IT!</span></>}
             <div className="mascot-dancer"><Avatar config={player.avatar} size={index === 0 ? 96 : 80} champion={index === 0} celebrating={!still}/></div>
@@ -44,7 +43,7 @@ export function Podium({ room, host, playerId, run }: { room: Room; host: boolea
           <div className="podium-step"><b>#{index + 1}</b><small>{index === 0 ? 'CHAMPION' : index === 1 ? 'SILVER' : 'BRONZE'}</small></div>
         </motion.article>;
       })}
-    </div>
+    </div></div>
     {pending && <div className="podium-tie" role="status"><p><b>Podium tie:</b> {tied.map((id) => room.players.find((player) => player.id === id)!.name).join(', ')}. {host ? 'Roll to lock the remaining places.' : 'The presenter is resolving the remaining places.'}</p>
       {host && <Button className="primary" onClick={() => void run(() => session.podiumDice())}>{room.podiumRolls.length ? 'Reroll podium tie' : 'Roll for podium'}</Button>}
     </div>}

@@ -1,24 +1,28 @@
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, writeFile, mkdir, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdtemp, readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
+import { createServer as createViteServer } from 'vite';
 import { io, type Socket } from 'socket.io-client';
+import type { RequestHandler } from 'express';
 import type { ClientEvents, ServerEvents } from '../src/network/events';
 import { createGameServer } from './app';
 import { readConfig } from './config';
+import { roomMetadataPlugin } from './metadata';
 
 type Client = Socket<ServerEvents, ClientEvents>;
 const clients: Client[] = [];
 const servers: ReturnType<typeof createGameServer>[] = [];
+const developmentServers: Awaited<ReturnType<typeof createViteServer>>[] = [];
 const directories: string[] = [];
 afterEach(async () => {
   for (const client of clients.splice(0)) client.disconnect();
+  await Promise.all(developmentServers.splice(0).map((server) => server.close()));
   await Promise.all(servers.splice(0).map((server) => server.close()));
   await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true })));
 });
-async function start(basePath = '', staticDir?: string) {
-  const server = createGameServer(readConfig({ BASE_PATH: basePath || '/' }), staticDir);
+async function start(basePath = '', staticDir?: string, development?: RequestHandler) {
+  const server = createGameServer(readConfig({ BASE_PATH: basePath || '/' }), staticDir, development);
   servers.push(server);
   await new Promise<void>((resolve) => server.http.listen(0, '127.0.0.1', resolve));
   const address = server.http.address();
@@ -36,15 +40,138 @@ async function start(basePath = '', staticDir?: string) {
     });
     return client;
   };
-  return { origin, connect };
+  return { origin, connect, http: server.http };
 }
 const hostRoom = (client: Client, code = 'ABC234', token = randomUUID()) =>
   client.timeout(2000).emitWithAck('host-room', code, token);
 const joinRoom = (client: Client, link: string, code = 'ABC234') =>
   client.timeout(2000).emitWithAck('join-room', code, link);
 
+async function htmlFixture(html?: string) {
+  const directory = await mkdtemp(join(process.cwd(), '.leaf-html-server-'));
+  directories.push(directory);
+  await writeFile(join(directory, 'index.html'), html ?? await readFile(new URL('../index.html', import.meta.url), 'utf8'));
+  return directory;
+}
+
+it('renders dev invites through Vite without losing generic metadata or the HMR client', async () => {
+  const title = 'Leaf It On The Keyboard | Xbox Type Night';
+  const description = 'An autumn arcade typing tournament.';
+  const directory = await htmlFixture(`<html><head><title>${title}</title><meta name="description" content="${description}"></head><body></body></html>`);
+  const { origin, http } = await start('', directory, (req, res, next) => vite.middlewares(req, res, next));
+  const vite = await createViteServer({
+    configFile: false,
+    root: directory,
+    plugins: [roomMetadataPlugin],
+    server: { middlewareMode: true, hmr: { server: http } },
+    optimizeDeps: { noDiscovery: true, include: [] },
+  });
+  developmentServers.push(vite);
+  const page = await fetch(`${origin}/?room=DEMX26`);
+  const html = await page.text();
+  expect(page.status).toBe(200);
+  expect(html.match(/<title\b[^>]*>[\s\S]*?<\/title>/gi)).toEqual([
+    '<title>Join room DEMX26 | Leaf It On The Keyboard</title>',
+  ]);
+  for (const name of ['og:title', 'og:description', 'twitter:title', 'twitter:description']) {
+    expect(html).toMatch(new RegExp(`<meta (?:name|property)="${name}" content="[^"]*DEMX26[^"]*" />`));
+  }
+  expect(html).toContain('src="/@vite/client"');
+  const hmrClient = await fetch(`${origin}/@vite/client`);
+  expect(hmrClient.status).toBe(200);
+  expect(hmrClient.headers.get('content-type')).toContain('javascript');
+  const hmr = new WebSocket(`${origin.replace('http:', 'ws:')}/?token=${vite.config.webSocketToken}`, 'vite-hmr');
+  try {
+    const connected = await new Promise<MessageEvent>((resolve, reject) => {
+      hmr.addEventListener('message', resolve, { once: true });
+      hmr.addEventListener('error', () => reject(new Error('Vite HMR connection failed.')), { once: true });
+    });
+    expect(JSON.parse(String(connected.data))).toEqual({ type: 'connected' });
+  } finally {
+    hmr.close();
+  }
+  for (const query of ['', '?room=invalid', '?room=DEMX26&room=ABC234', '?room=%3Cscript%3E']) {
+    const generic = await (await fetch(`${origin}/${query}`)).text();
+    expect(generic).toContain(`<title>${title}</title>`);
+    expect(generic).toContain(`<meta name="description" content="${description}">`);
+    expect(generic).not.toContain('og:title');
+    expect(generic).not.toContain('twitter:title');
+    expect(generic).not.toContain('Join room');
+    expect(generic).toContain('src="/@vite/client"');
+  }
+}, 15000);
+
+it.each(['', '/games/fall'])('renders crawlable room metadata at runtime base "%s" without conflicting tags', async (basePath) => {
+  const template = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+  const staleMetadata = `<title>Old title</title>
+    <meta content="Old description" name="description">
+    <meta content="Old title" property="og:title">
+    <meta property='og:description' content='Old description'>
+    <meta name=twitter:title content="Old title">
+    <META NAME="twitter:description" CONTENT="Old description">`;
+  const directory = await htmlFixture(template.replace('</head>', `${staleMetadata}</head>`));
+  const { origin } = await start(basePath, directory);
+  for (const pagePath of [`${basePath}/`, `${basePath}/index.html`]) {
+    const response = await fetch(`${origin}${pagePath}?room=ABC234`);
+    const html = await response.text();
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('text/html');
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(html).toContain(`<base href="${basePath}/">`);
+    expect(html.match(/<title\b[^>]*>[\s\S]*?<\/title>/gi)).toEqual([
+      '<title>Join room ABC234 | Leaf It On The Keyboard</title>',
+    ]);
+    for (const name of ['description', 'og:title', 'og:description', 'twitter:title', 'twitter:description']) {
+      const tags = [...html.matchAll(/<meta\b[^>]*>/gi)]
+        .map(([tag]) => tag)
+        .filter((tag) => tag.includes(`="${name}"`));
+      expect(tags).toHaveLength(1);
+      expect(tags[0]).toContain('ABC234');
+    }
+    expect(html).not.toContain('Old title');
+    expect(html).not.toContain('Old description');
+    expect(html).toContain('<meta name="theme-color" content="#172d24" />');
+    expect(html).toContain('<div id="root"></div>');
+  }
+});
+
+it('keeps the generic home title and description unchanged after serving an invite', async () => {
+  const template = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+  const directory = await htmlFixture(template);
+  const { origin } = await start('', directory);
+  await fetch(`${origin}/?room=ABC234`);
+  const response = await fetch(`${origin}/`);
+  expect(response.status).toBe(200);
+  expect(await response.text()).toBe(template.replace('<head>', '<head><base href="/">'));
+});
+
+it.each([
+  '',
+  '?room=',
+  '?room=abc234',
+  '?room=ABC23',
+  '?room=ABC2345',
+  '?room=ABI234',
+  '?room=ABO234',
+  '?room=ABC230',
+  '?room=ABC231',
+  '?room=ABC234&room=XYZ789',
+  '?room=ABC234&room=ABC234',
+  '?room=ABC234&room=',
+  '?room[]=ABC234',
+  '?room=%22%3E%3Cscript%3Ealert(1)%3C%2Fscript%3E',
+  '?room=ABC234%0A',
+])('preserves generic HTML without reflecting invalid or ambiguous room query "%s"', async (query) => {
+  const template = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+  const directory = await htmlFixture(template);
+  const { origin } = await start('/games/fall', directory);
+  const response = await fetch(`${origin}/games/fall/${query}`);
+  expect(response.status).toBe(200);
+  expect(await response.text()).toBe(template.replace('<head>', '<head><base href="/games/fall/">'));
+});
+
 it('serves React and assets at a runtime base path, redirects missing slash, and isolates private files', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'leaf-socket-server-'));
+  const directory = await mkdtemp(join(process.cwd(), '.leaf-socket-server-'));
   directories.push(directory);
   const dist = join(directory, 'dist');
   await mkdir(join(dist, 'assets'), { recursive: true });

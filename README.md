@@ -18,7 +18,7 @@ npm run build
 npm start
 ```
 
-Open `http://localhost:3000`. Choose **Host a game**, share the room code or invite link, and have players open the **same server URL**. Use separate browser profiles/contexts when testing multiple players on one computer: tabs in the same profile deliberately share reconnect identity.
+Open `http://localhost:3000`. Choose **Host a game**, share the room code or invite link, and have players open the **same server URL**. Shared links use `?room=ABC234`: the page title and server-rendered social-preview title/description identify the room before joining, including under a deployment prefix. Legacy `#room=ABC234` invites still join correctly, but their fragments cannot provide room-specific metadata to the server. Use separate browser profiles/contexts when testing multiple players on one computer: tabs in the same profile deliberately share reconnect identity.
 
 ## Deploy with Coolify
 
@@ -76,7 +76,7 @@ Odd stages use pairs plus one trio; only one player advances from each match. Pa
 
 The final match's locked winner is always champion, including when match dice decided the winner. Remaining podium places are ranked by furthest stage reached, then that stage's score, WPM, accuracy, and best streak, all descending. Missing accuracy ranks below measured accuracy. The presenter resolves any remaining tie affecting a podium place with **Roll for podium**, rerolling only unresolved players. Rolls are recorded in event history, checkpoints, and public results. A two-player event shows two places; lower non-podium placements may remain shared.
 
-The champion appears immediately while other podium ties are pending. Once resolved, the autumn podium reveals bronze, silver, then gold amid falling leaf confetti, sparkles, waving paws, and dancing woodland avatars. **Pause party** stops the celebration; **Less motion** or the operating system's reduced-motion preference displays static results without the reveal or looping effects.
+The champion appears immediately while other podium ties are pending. Once resolved, the full-window autumn podium reveals bronze, silver, then gold amid falling leaf confetti, sparkles, waving paws, and dancing woodland avatars. Bracket, history, backups, settings, and winner awards remain reachable. **Pause party** stops the celebration; **Less motion** or the operating system's reduced-motion preference displays static results without the reveal or looping effects.
 
 The presenter and champion see **Winner awards**: a PNG to insert into an email signature, a downloadable standalone HTML certificate, and **Print / Save as PDF** through the browser print dialog. Both awards name the champion **GDS #1 Best Keyboard Warrior** for winning the **2026 Fall Faster Finger Championship**. No email address, email sending, account, upload, or external image service is involved. These are friendly-event keepsakes, not authenticated credentials. The badge renders the actual leaf-and-keyboard favicon SVG, including under runtime deployment prefixes; a failed icon load shows an error rather than exporting incomplete artwork.
 - Eliminated players can practice and follow the bracket. Backgrounding or disconnecting does not pause a competitive match.

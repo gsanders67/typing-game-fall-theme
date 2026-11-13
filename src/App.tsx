@@ -9,6 +9,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { Button, Pager, PartyMotion, Screen, ToolsDialog } from './ui/Party';
 import { Podium } from './ui/Podium';
 import { downloadFile } from './ui/awards';
+import { isRoomCode, joinRoomTitle, roomFromUrl, roomInviteUrl, SITE_TITLE } from './network/invites';
 
 function download(name: string, value: string) {
   downloadFile(name, new Blob([value], { type: 'application/json' }));
@@ -39,7 +40,7 @@ export function App() {
   const [settings, setSettings] = useState(getSettings);
   const [view, setView] = useState<'home' | 'join'>('home');
   const [name, setName] = useState('');
-  const [code, setCode] = useState(() => new URLSearchParams(location.hash.slice(1)).get('room') || '');
+  const [code, setCode] = useState(() => roomFromUrl(new URL(location.href)));
   const [avatar, setAvatar] = useState<AvatarConfig>(defaultAvatar);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -61,6 +62,9 @@ export function App() {
   const showGame = !!board && (!!practice || competitive);
   const previous = useRef({ score: 0, lives: 3, champion: '' });
   const activeChampion = room?.phase === 'finished' ? room.matches.at(-1)?.winner || '' : '';
+  const pageTitle = room ? `${room.phase === 'finished' ? 'Results for room' : 'Room'} ${room.code} | Leaf It On The Keyboard`
+    : isRoomCode(code) ? joinRoomTitle(code) : SITE_TITLE;
+  useEffect(() => { document.title = pageTitle; }, [pageTitle]);
   useEffect(() => {
     if (board && !settings.muted) {
       if (board.score > previous.current.score) playTone('clear', settings.volume);
@@ -159,8 +163,8 @@ export function App() {
       </form>
     </Screen>)}
 
-    {room && !showGame && <Screen key="room" className="room-main">
-      <div className="room-title"><div><div className="eyebrow">{state.role === 'host' ? 'PRESENTER DESK' : `WELCOME, ${me?.name.toUpperCase() || 'FRIEND'}`}</div><h1>{room.phase === 'lobby' ? 'The gathering place.' : room.phase === 'finished' ? 'All hail the fast fingers.' : 'The race for the crown.'}</h1></div><div className="room-code"><small>JOIN AT THIS SITE WITH CODE</small><strong>{room.code}</strong><Button className="text-button" onClick={() => void run(() => navigator.clipboard.writeText(`${location.origin}${location.pathname}#room=${room.code}`))}>Copy invite link</Button></div></div>
+    {room && !showGame && <Screen key="room" className={`room-main${room.phase === 'finished' && !resultsDetails ? ' showing-podium' : ''}`}>
+      <div className="room-title"><div><div className="eyebrow">{state.role === 'host' ? 'PRESENTER DESK' : `WELCOME, ${me?.name.toUpperCase() || 'FRIEND'}`}</div><h1>{room.phase === 'lobby' ? 'The gathering place.' : room.phase === 'finished' ? 'All hail the fast fingers.' : 'The race for the crown.'}</h1></div><div className="room-code"><small>JOIN AT THIS SITE WITH CODE</small><strong>{room.code}</strong><Button className="text-button" onClick={() => void run(() => navigator.clipboard.writeText(roomInviteUrl(location.href, room.code)))}>Copy invite link</Button></div></div>
       {room.phase === 'lobby' ? <div className="lobby-grid">
         <Roster room={room} host={state.role === 'host'} run={run}/>
         <aside className="sidebar">

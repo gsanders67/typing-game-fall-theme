@@ -29,14 +29,28 @@ test('Express serves the game and hash invites under a runtime base path', async
   expect(errors).toEqual([]);
 });
 
-test('host and player connect through the production Socket.IO base path', async ({ browser, page: host }) => {
+test('query invites join the production Socket.IO base path with room-specific previews', async ({ browser, page: host }) => {
   await host.goto('/event/');
   await host.getByRole('button', { name: 'Host a game', exact: true }).click();
   const code = await host.locator('.room-code strong').innerText();
+  await host.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+      writeText: async (value: string) => { document.documentElement.dataset.copiedInvite = value; },
+    } });
+  });
+  await host.getByRole('button', { name: 'Copy invite link', exact: true }).click();
+  const expectedInvite = new URL(`/event/?room=${code}`, host.url()).href;
+  await expect.poll(() => host.evaluate(() => document.documentElement.dataset.copiedInvite)).toBe(expectedInvite);
   const context = await browser.newContext();
   try {
     const player = await context.newPage();
-    await player.goto(`/event/#room=${code}`);
+    const invite = expectedInvite;
+    const html = await (await player.request.get(invite)).text();
+    expect(html).toContain(`Join room ${code}`);
+    expect(html).toContain('og:title');
+    expect(html).toContain('twitter:title');
+    await player.goto(invite);
+    await expect(player).toHaveTitle(`Join room ${code} | Leaf It On The Keyboard`);
     await player.getByLabel('Your name').fill('Coolify Fox');
     await player.getByRole('button', { name: 'Let me in' }).click();
     await expect(player.getByRole('heading', { name: 'The gathering place.' })).toBeVisible();
