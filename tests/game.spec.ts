@@ -1,10 +1,27 @@
 import { expect, test, type Browser, type Page } from '@playwright/test';
 import { expectScreenFits } from './viewport';
 
+async function keepNetworkClock(page: Page) {
+  // Synthetic game-time jumps must not expire Socket.IO's real-time heartbeat.
+  await page.route('**/socket.io/**', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get('transport') !== 'polling' || url.searchParams.has('sid')) {
+      await route.continue();
+      return;
+    }
+    const response = await route.fetch();
+    const body = await response.text();
+    if (!body.startsWith('0{')) throw new Error('Expected a Socket.IO handshake.');
+    const handshake = JSON.parse(body.slice(1));
+    handshake.pingTimeout = 24 * 60 * 60 * 1000;
+    await route.fulfill({ response, body: `0${JSON.stringify(handshake)}` });
+  });
+}
+
 async function player(browser: Browser, code: string, name: string, fixedTime?: number) {
   const context = await browser.newContext({ reducedMotion: fixedTime === undefined ? 'no-preference' : 'reduce' });
   const page = await context.newPage();
-  if (fixedTime !== undefined) await page.clock.setFixedTime(fixedTime);
+  if (fixedTime !== undefined) { await keepNetworkClock(page); await page.clock.setFixedTime(fixedTime); }
   await page.goto(`/#room=${code}`);
   await page.getByLabel('Your name').fill(name);
   await page.getByRole('button', { name: 'Let me in' }).click();
@@ -48,6 +65,7 @@ test('practice supports automatic clearing, typo correction, life loss and acces
 });
 
 test('trio tournament, checkpoint restore, reconnect, dice and one champion', async ({ browser, page: host }) => {
+  await keepNetworkClock(host);
   await host.clock.install();
   await host.goto('/');
   await host.getByRole('button', { name: 'Host a game', exact: true }).click();
@@ -59,7 +77,7 @@ test('trio tournament, checkpoint restore, reconnect, dice and one champion', as
   await host.getByLabel('Stage difficulty').selectOption('Acorn');
   await host.getByRole('button', { name: 'Start pending matches' }).click();
   await expect(clients[0].page.getByText('FINGERS ON KEYS')).toBeVisible();
-  // Let all data channels acknowledge the common start before advancing host time.
+  // Let all players acknowledge the common start before advancing host time.
   await Promise.all(clients.map((client) => expect(client.page.getByText('FINGERS ON KEYS')).toBeVisible()));
   await host.waitForTimeout(500);
   const backup = await host.evaluate(async () => {
@@ -96,6 +114,7 @@ test('trio tournament, checkpoint restore, reconnect, dice and one champion', as
 test('25-player fixed bracket completes four simultaneous stages with one champion', async ({ browser, page: host }) => {
   test.setTimeout(240_000);
   await host.setViewportSize({ width: 1280, height: 720 });
+  await keepNetworkClock(host);
   let time = Date.now();
   await host.clock.setFixedTime(time);
   await host.goto('/');
@@ -107,7 +126,7 @@ test('25-player fixed bracket completes four simultaneous stages with one champi
     time += milliseconds;
     await host.clock.setFixedTime(time);
     await Promise.all(clients.map((client) => client.page.clock.setFixedTime(time)));
-    // Let real data-channel heartbeats catch up before the next snapshot tick.
+    // Let real Socket.IO messages catch up before the next snapshot tick.
     await expect.poll(() => host.evaluate(async () => {
       const path = '/src/state/session.ts';
       const { session } = await import(/* @vite-ignore */ path) as typeof import('../src/state/session');
@@ -168,7 +187,7 @@ test('25-player fixed bracket completes four simultaneous stages with one champi
       await clients[0].page.evaluate(async () => {
         const path = '/src/state/session.ts';
         const { session } = await import(/* @vite-ignore */ path) as typeof import('../src/state/session');
-        const connection = Reflect.get(session, 'connection') as import('peerjs').DataConnection;
+        const connection = Reflect.get(session, 'connection') as import('../src/network/transport').RoomConnection;
         connection.close();
       });
       await expect(clients[0].page.getByRole('button', { name: 'Reconnect', exact: true })).toBeVisible();

@@ -1,12 +1,10 @@
-import type Peer from 'peerjs';
-import type { DataConnection } from 'peerjs';
 import { z } from 'zod';
 import { advance, DURATION, input, newBoard, stats, type Board, type Difficulty } from '../game/engine';
 import {
   defaultAvatar, draw, emptyRoom, finish, log, resolvePlayers, rollDice,
   validateCheckpoint, type AvatarConfig, type Room,
 } from '../tournament/model';
-import { createPeer, peerId } from '../network/peer';
+import { createTransport, type RoomTransport, type RoomConnection } from '../network/transport';
 import { messageSchema, type KeyEvent } from '../network/protocol';
 
 const LAG = 300;
@@ -18,7 +16,7 @@ const backupSchema = z.object({
 });
 type Backup = { format: 'leaf-private-v1'; room: Room; secrets: Record<string, string> };
 interface Runtime { board: Board; queue: KeyEvent[]; accepted: number; applied: number; ackStart: boolean }
-interface Link { conn: DataConnection; player?: string; seen: number; messages: number; window: number }
+interface Link { conn: RoomConnection; player?: string; seen: number; messages: number; window: number }
 export interface Snapshot {
   role: 'none' | 'host' | 'player';
   room?: Room;
@@ -39,8 +37,8 @@ type StatePacket = {
 const identitySchema = z.object({ id: z.string().uuid(), token: z.string().uuid() });
 
 export class Session {
-  private peer?: Peer;
-  private connection?: DataConnection;
+  private transport?: RoomTransport;
+  private connection?: RoomConnection;
   private links = new Map<string, Link>();
   private runtimes = new Map<string, Runtime>();
   private secrets: Record<string, string> = {};
@@ -97,21 +95,21 @@ export class Session {
     let opened = false;
     for (let attempt = 0; attempt < 4; attempt++) {
       try {
-        this.peer = createPeer(peerId(this.room.code));
-        await this.waitForPeer(this.peer);
+        this.transport = createTransport(this.room.code);
+        await this.waitForServer(this.transport);
         opened = true;
         break;
       } catch (error) {
-        this.peer?.destroy();
+        this.transport?.destroy();
         if (!(error instanceof Error) || !error.message.includes('taken') || attempt === 3) throw error;
         this.room.code = this.newCode();
         log(this.room, 'Previous code unavailable; new code issued. Players must use the new joining code.');
         this.update({ notice: 'Room code changed. Share the new code; returning players should keep their original tab open.' });
       }
     }
-    if (!opened || !this.peer) throw new Error('Could not establish presenter signaling.');
-    this.peer.on('connection', (conn) => this.accept(conn));
-    this.watchPeer(this.peer);
+    if (!opened || !this.transport) throw new Error('Could not connect the presenter to the game server.');
+    this.transport.on('connection', (conn) => this.accept(conn));
+    this.watchServer(this.transport);
     this.update({ connected: true });
     this.persist();
     this.timer = setInterval(() => this.tickHost(), 50);
@@ -119,18 +117,20 @@ export class Session {
   private newCode() {
     return Array.from(crypto.getRandomValues(new Uint8Array(6)), (byte) => alphabet[byte % alphabet.length]).join('');
   }
-  private waitForPeer(peer: Peer): Promise<string> {
+  private waitForServer(transport: RoomTransport): Promise<string> {
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('Signaling timed out. Check network access to PeerJS.')), 15000);
-      peer.once('open', (id) => { clearTimeout(timeout); resolve(id); });
-      peer.once('error', (error) => { clearTimeout(timeout); reject(error); });
+      const timeout = setTimeout(() => reject(new Error('Game server connection timed out. Check your connection and try again.')), 15000);
+      transport.once('open', (id) => { clearTimeout(timeout); resolve(id); });
+      transport.once('error', (error) => { clearTimeout(timeout); reject(error); });
     });
   }
-  private watchPeer(peer: Peer) {
-    peer.on('error', (error) => this.error(error));
-    peer.on('disconnected', () => {
-      this.update({ notice: 'Signaling disconnected; existing links may continue. Reconnecting signaling...' });
-      if (!peer.destroyed) peer.reconnect();
+  private watchServer(transport: RoomTransport) {
+    transport.on('error', (error) => this.error(error));
+    transport.on('disconnected', () => {
+      this.update({ connected: false, notice: 'Game server disconnected. Reconnecting; players may need to use Reconnect.' });
+    });
+    transport.on('open', () => {
+      if (this.snapshot.role === 'host') this.update({ connected: true, error: undefined, notice: 'Game server reconnected. Players can use Reconnect.' });
     });
   }
   async join(code: string, name: string, avatar: AvatarConfig = defaultAvatar) {
@@ -142,20 +142,20 @@ export class Session {
     this.storage(`leaf-identity-${code}`, JSON.stringify(this.identity));
     this.hello = { name, avatar };
     this.update({ playerId: this.identity.id });
-    this.peer = createPeer();
-    await this.waitForPeer(this.peer);
-    this.watchPeer(this.peer);
+    this.transport = createTransport();
+    await this.waitForServer(this.transport);
+    this.watchServer(this.transport);
     await this.connect(code);
     this.timer = setInterval(() => this.tickPlayer(), 100);
   }
   private connect(code: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      if (!this.peer || !this.identity || !this.hello) { reject(new Error('No player identity.')); return; }
-      const conn = this.peer.connect(peerId(code), { reliable: true, serialization: 'binary' });
+      if (!this.transport || !this.identity || !this.hello) { reject(new Error('No player identity.')); return; }
+      const conn = this.transport.connect(code);
       this.connection = conn;
       const timeout = setTimeout(() => {
+        reject(new Error('Room connection timed out. Check the code and that the presenter and game server are connected.'));
         conn.close();
-        reject(new Error('Room connection timed out. Check the code and network; public P2P may be blocked.'));
       }, 15000);
       conn.on('open', () => {
         conn.send({ type: 'hello', ...this.identity, ...this.hello });
@@ -190,7 +190,7 @@ export class Session {
     });
   }
   async reconnect(newCode?: string) {
-    if (!this.hello || !this.identity || !this.peer) throw new Error('Rejoin using the room code.');
+    if (!this.hello || !this.identity || !this.transport) throw new Error('Rejoin using the room code.');
     const code = newCode || this.snapshot.room?.code;
     if (!code) throw new Error('No room to reconnect to. Rejoin using the room code.');
     if (!/^[A-HJ-NP-Z2-9]{6}$/.test(code)) throw new Error('Enter a valid six-character room code.');
@@ -255,7 +255,7 @@ export class Session {
     }
     this.flush();
   }
-  private accept(conn: DataConnection) {
+  private accept(conn: RoomConnection) {
     if (this.links.size >= 30) { conn.close(); return; }
     const link: Link = { conn, seen: Date.now(), messages: 0, window: Date.now() };
     this.links.set(conn.connectionId, link);
@@ -515,8 +515,8 @@ export class Session {
   close() {
     this.disposed = true;
     clearInterval(this.timer);
-    this.peer?.destroy();
-    this.connection = undefined; this.peer = undefined;
+    this.transport?.destroy();
+    this.connection = undefined; this.transport = undefined;
     this.links.clear(); this.runtimes.clear();
     this.pending = []; this.seq = 0; this.activeMatch = '';
     this.room = undefined;

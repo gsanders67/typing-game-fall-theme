@@ -12,13 +12,10 @@ export default defineConfig({
     headless: true,
     launchOptions: { args: ['--disable-background-timer-throttling', '--disable-renderer-backgrounding'] },
   },
-  webServer: [
-    { command: 'node tests/signal.mjs', port: 9000, reuseExistingServer: false },
-    {
-      command: `npm run dev -- --port ${port} --strictPort`,
-      port: Number(port),
-      env: { VITE_PEER_HOST: '127.0.0.1', VITE_PEER_PORT: '9000' },
-      reuseExistingServer: false,
-    },
-  ],
+  webServer: {
+    command: 'npm run dev',
+    port: Number(port),
+    env: { PORT: port, BASE_PATH: '/', PUBLIC_URL: '' },
+    reuseExistingServer: false,
+  },
 });

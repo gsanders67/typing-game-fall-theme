@@ -40,7 +40,7 @@ test('host validates live typing, reconnect identity, stale input and forged con
     const path = '/src/state/session.ts';
     const { session } = await import(/* @vite-ignore */ path) as typeof import('../src/state/session');
     const state = session.getSnapshot();
-    const connection = Reflect.get(session, 'connection') as import('peerjs').DataConnection;
+    const connection = Reflect.get(session, 'connection') as import('../src/network/transport').RoomConnection;
     const packet = { type: 'keys', match: 'r0m0', revision: state.room!.revision };
     connection.send({ ...packet, events: [{ seq: state.ack, at: 1, key: 'z' }] });
     connection.send({ ...packet, events: [{ seq: state.ack + 2, at: 1, key: 'z' }] });
@@ -68,7 +68,7 @@ test('host validates live typing, reconnect identity, stale input and forged con
   await fox.evaluate(async () => {
     const path = '/src/state/session.ts';
     const { session } = await import(/* @vite-ignore */ path) as typeof import('../src/state/session');
-    const connection = Reflect.get(session, 'connection') as import('peerjs').DataConnection;
+    const connection = Reflect.get(session, 'connection') as import('../src/network/transport').RoomConnection;
     connection.send({ type: 'keys', match: 'r0m0', revision: -1, events: [{ seq: 1, at: 1, key: 'a' }] });
   });
   await expect(fox.getByRole('button', { name: 'Reconnect', exact: true })).toBeVisible();
@@ -79,12 +79,40 @@ test('host validates live typing, reconnect identity, stale input and forged con
   await fox.evaluate(async () => {
     const path = '/src/state/session.ts';
     const { session } = await import(/* @vite-ignore */ path) as typeof import('../src/state/session');
-    const connection = Reflect.get(session, 'connection') as import('peerjs').DataConnection;
+    const connection = Reflect.get(session, 'connection') as import('../src/network/transport').RoomConnection;
     connection.send({ type: 'start' });
   });
   await expect(fox.getByRole('button', { name: 'Reconnect', exact: true })).toBeVisible();
   await expect(host.locator('.match-card.playing')).toHaveCount(1);
   for (const client of clients) await client.context.close();
+});
+
+test('presenter reconnects to the backend without losing the room or player identities', async ({ browser, page: host }) => {
+  await host.goto('/');
+  await host.getByRole('button', { name: 'Host a game', exact: true }).click();
+  const code = await host.locator('.room-code strong').innerText();
+  const context = await browser.newContext();
+  try {
+    const player = await context.newPage();
+    await player.goto(`/#room=${code}`);
+    await player.getByLabel('Your name').fill('Returning Fox');
+    await player.getByRole('button', { name: 'Let me in' }).click();
+    await player.getByRole('button', { name: "I'm ready!" }).click();
+    await expect(host.getByText('1 ready', { exact: true })).toBeVisible();
+    await host.evaluate(async () => {
+      const path = '/src/state/session.ts';
+      const { session } = await import(/* @vite-ignore */ path) as typeof import('../src/state/session');
+      const transport = Reflect.get(session, 'transport') as import('../src/network/transport').RoomTransport;
+      const socket = Reflect.get(transport, 'socket') as import('socket.io-client').Socket;
+      socket.io.engine.close();
+    });
+    await expect(player.getByRole('button', { name: 'Reconnect', exact: true })).toBeVisible();
+    await expect(host.getByText('Game server reconnected. Players can use Reconnect.')).toBeVisible();
+    await player.getByRole('button', { name: 'Reconnect', exact: true }).click();
+    await expect(player.getByRole('button', { name: 'Reconnect', exact: true })).not.toBeVisible();
+    await expect(host.locator('.room-code strong')).toHaveText(code);
+    await expect(host.getByText('1 ready', { exact: true })).toBeVisible();
+  } finally { await context.close(); }
 });
 
 test('restored green screens fit desktop viewports without clipping or scrolling', async ({ page }) => {

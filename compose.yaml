@@ -1,0 +1,15 @@
+services:
+  game:
+    build: .
+    image: leaf-type-game:local
+    restart: unless-stopped
+    environment:
+      PORT: "3000"
+      HOST: 0.0.0.0
+      PUBLIC_URL: ${PUBLIC_URL:-}
+      BASE_PATH: ${BASE_PATH:-}
+    expose:
+      - "3000"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
