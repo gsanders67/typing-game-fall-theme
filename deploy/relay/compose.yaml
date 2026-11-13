@@ -1,0 +1,53 @@
+services:
+  credentials:
+    image: leaf-type-relay-credentials:local
+    build: .
+    restart: unless-stopped
+    environment:
+      TURN_HOST: ${TURN_HOST:?Set TURN_HOST in .env}
+      TURN_SHARED_SECRET: ${TURN_SHARED_SECRET:?Set TURN_SHARED_SECRET in .env}
+      ALLOWED_ORIGIN: ${ALLOWED_ORIGIN:?Set ALLOWED_ORIGIN in .env}
+    volumes:
+      - ./certs:/certs:ro
+    group_add: ["2000"]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('https').get({hostname:'127.0.0.1',port:8443,path:'/health',rejectUnauthorized:false},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  coturn:
+    image: coturn/coturn:4.18.0-r0
+    restart: unless-stopped
+    command:
+      - -c
+      - /etc/coturn/turnserver.conf
+      - --realm=${TURN_HOST:?Set TURN_HOST in .env}
+      - --external-ip=${TURN_PUBLIC_IP:?Set TURN_PUBLIC_IP in .env}
+      - --static-auth-secret=${TURN_SHARED_SECRET:?Set TURN_SHARED_SECRET in .env}
+    volumes:
+      - ./turnserver.conf:/etc/coturn/turnserver.conf:ro
+      - ./certs:/certs:ro
+    group_add: ["2000"]
+    ports:
+      - "3478:3478/tcp"
+      - "3478:3478/udp"
+      - "49160-49415:49160-49415/udp"
+
+  gateway:
+    image: haproxy:3.2-alpine
+    restart: unless-stopped
+    environment:
+      ICE_HOST: ${ICE_HOST:?Set ICE_HOST in .env}
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - "443:443/tcp"
+    depends_on:
+      credentials:
+        condition: service_healthy
+      coturn:
+        condition: service_started

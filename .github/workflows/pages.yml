@@ -15,6 +15,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      VITE_ICE_SERVERS_URL: ${{ vars.VITE_ICE_SERVERS_URL }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6

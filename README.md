@@ -13,7 +13,7 @@ npm run dev
 
 Open the address printed by Vite. Choose **Host a game**, share the six-character room code or invite link, and have players join from their own browsers. Use a separate browser profile/context when testing multiple players on one computer: tabs in the same profile deliberately share reconnect identity.
 
-Public PeerJS signaling and browser P2P are used by default. Allow the public PeerJS service, STUN, and WebRTC through your network. Some work networks cannot establish P2P without TURN; no separately provisioned relay is included. Connections failing preflight display an error, not a successful join.
+Public PeerJS signaling and browser P2P are used by default. Without a configured relay, connections use STUN and require a working direct path between browsers. For players on different or restricted networks, deploy the [self-hosted TURN relay](deploy/relay/README.md) and set `VITE_ICE_SERVERS_URL`. The game fetches temporary credentials before opening a room or joining; a configured relay outage is shown as an error rather than silently falling back to direct-only connections.
 
 ## Run the event
 
@@ -89,6 +89,8 @@ Repository: https://github.com/gsanders67/typing-game-fall-theme
 GitHub Pages uses **Settings -> Pages -> Source: GitHub Actions**. The **Validate and deploy Type Night** workflow validates and publishes every push to `main`, and can also be run manually from the Actions tab.
 
 Vite emits relative assets and invites use hash routing, so root and repository-subpath hosting both work. Production tests exercise an `/event/` subpath. No `VITE_PEER_HOST` or `VITE_PEER_PORT` variables should be set in the production build; these are for the local test server only and must never contain secrets.
+
+For cross-network play, set the repository Actions variable `VITE_ICE_SERVERS_URL` to your VPS credential endpoint (for example, `https://ice.example.com/ice`) and run the Pages workflow again. This URL is public; never put the TURN shared secret in a `VITE_` variable. The VPS deployment and certificate/firewall instructions are in [the relay guide](deploy/relay/README.md).
 
 Fonts use Google Fonts with system fallbacks. The original dark-green/autumn presentation uses simple woodland avatars and falling word chips; no Jackbox game assets or source were copied. Motion for React drives button presses, character reactions, and screen/page transitions. **Less motion** or the system preference removes transform-heavy effects while preserving immediate feedback. Music/effects are synthesized locally. The game is inspired by the falling-word mechanic, not a reproduction of the reference site's code.
 

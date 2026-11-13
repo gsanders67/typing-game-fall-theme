@@ -1,8 +1,9 @@
 import Peer from 'peerjs';
+import { loadIceServers } from './ice';
 
 export const peerId = (code: string) => `leaf-type-v1-${code}`;
 
-export function createPeer(id?: string) {
+export async function createPeer(id?: string) {
   const options = import.meta.env.VITE_PEER_HOST
     ? {
         host: import.meta.env.VITE_PEER_HOST,
@@ -11,6 +12,6 @@ export function createPeer(id?: string) {
         secure: false,
         config: { iceServers: [] },
       }
-    : {};
+    : { config: { iceServers: await loadIceServers(import.meta.env.VITE_ICE_SERVERS_URL) } };
   return id ? new Peer(id, options) : new Peer(options);
 }

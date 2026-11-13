@@ -97,7 +97,7 @@ export class Session {
     let opened = false;
     for (let attempt = 0; attempt < 4; attempt++) {
       try {
-        this.peer = createPeer(peerId(this.room.code));
+        this.peer = await createPeer(peerId(this.room.code));
         await this.waitForPeer(this.peer);
         opened = true;
         break;
@@ -142,7 +142,7 @@ export class Session {
     this.storage(`leaf-identity-${code}`, JSON.stringify(this.identity));
     this.hello = { name, avatar };
     this.update({ playerId: this.identity.id });
-    this.peer = createPeer();
+    this.peer = await createPeer();
     await this.waitForPeer(this.peer);
     this.watchPeer(this.peer);
     await this.connect(code);
@@ -154,9 +154,9 @@ export class Session {
       const conn = this.peer.connect(peerId(code), { reliable: true, serialization: 'binary' });
       this.connection = conn;
       const timeout = setTimeout(() => {
+        reject(new Error('Room connection timed out. Check the room code and ask the presenter to verify the TURN relay and firewall settings.'));
         conn.close();
-        reject(new Error('Room connection timed out. Check the code and network; public P2P may be blocked.'));
-      }, 15000);
+      }, 30000);
       conn.on('open', () => {
         conn.send({ type: 'hello', ...this.identity, ...this.hello });
       });

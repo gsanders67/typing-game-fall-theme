@@ -10,7 +10,7 @@ test('one host handles 25 browser peers and authoritative typing traffic', async
     const enginePath = '/src/game/engine.ts';
     const { createPeer } = await import(/* @vite-ignore */ path) as typeof import('../src/network/peer');
     const { newBoard, input } = await import(/* @vite-ignore */ enginePath) as typeof import('../src/game/engine');
-    const peer = createPeer();
+    const peer = await createPeer();
     const probe = { connections: 0, batches: 0, inputs: 0, failed: false };
     Object.assign(window, { __probe: probe, __peer: peer });
     peer.on('connection', (conn) => {
@@ -41,7 +41,7 @@ test('one host handles 25 browser peers and authoritative typing traffic', async
     await client.evaluate(async (hostId) => {
       const path = '/src/network/peer.ts';
       const { createPeer } = await import(/* @vite-ignore */ path) as typeof import('../src/network/peer');
-      const peer = createPeer();
+      const peer = await createPeer();
       Object.assign(window, { __peer: peer });
       await new Promise<void>((resolve, reject) => {
         peer.on('error', reject);
