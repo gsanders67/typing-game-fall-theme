@@ -26,6 +26,29 @@ for (const reducedMotion of ['reduce', 'no-preference'] as const) test(`two-play
   const champion = saved.room.players.find((player) => player.id === saved.room.matches[0].winner)!;
   await expect(page.locator('.place-1 .podium-name')).toHaveText(champion.name);
   await expect(page.locator('.place-1')).toHaveCSS('opacity', '1');
+  if (reducedMotion === 'reduce') {
+    await expect(page.locator('.party-confetti')).toHaveCount(0);
+    await expect(page.locator('.mascot-dancer').first()).toHaveCSS('animation-name', 'none');
+    await expect(page.locator('.avatar-celebrating')).toHaveCount(0);
+    await expect(page.locator('.champion-halo')).toHaveCSS('animation-name', 'none');
+  } else {
+    await expect(page.locator('.party-confetti')).toHaveCount(60);
+    await expect(page.locator('.avatar-celebrating')).toHaveCount(2);
+    const dancer = page.locator('.place-1 .mascot-dancer');
+    const start = await dancer.evaluate((node) => getComputedStyle(node).transform);
+    await expect.poll(() => dancer.evaluate((node) => getComputedStyle(node).transform)).not.toBe(start);
+    await page.getByRole('button', { name: 'Pause party', exact: true }).click();
+    await expect(page.locator('.party-confetti')).toHaveCount(0);
+    await expect(dancer).toHaveCSS('animation-name', 'none');
+    await expect(page.locator('.avatar-celebrating')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Keep partying', exact: true }).click();
+    await expect(page.locator('.party-confetti')).toHaveCount(60);
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByLabel('Less motion').check();
+    await page.getByRole('button', { name: 'Close Settings', exact: true }).click();
+    await expect(page.locator('.party-confetti')).toHaveCount(0);
+    await expect(dancer).toHaveCSS('animation-name', 'none');
+  }
   await expectScreenFits(page);
   const initialSeed = saved.room.matches[0].seed;
   await page.evaluate(async () => {
@@ -43,6 +66,18 @@ for (const reducedMotion of ['reduce', 'no-preference'] as const) test(`two-play
     const room = session.getSnapshot().room!;
     return { seed: room.matches[0].seed, results: room.matches[0].results, rolls: room.podiumRolls, phase: room.phase };
   })).toEqual({ seed: initialSeed, results: {}, rolls: [], phase: 'tournament' });
+});
+
+test('badge artwork failures show an error instead of downloading a broken badge', async ({ page }) => {
+  const saved = backup();
+  await page.addInitScript((data) => localStorage.setItem('leaf-host-checkpoint', JSON.stringify(data)), saved);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Returning presenter? Restore your event', exact: true }).click();
+  await page.getByRole('button', { name: 'Restore last browser checkpoint', exact: true }).click();
+  await page.getByRole('button', { name: 'Winner awards', exact: true }).click();
+  await page.route('**/favicon.svg', (route) => route.fulfill({ status: 404, body: 'Missing artwork' }));
+  await page.getByRole('button', { name: 'Download email badge', exact: true }).click();
+  await expect(page.locator('[role="alert"]')).toContainText('The badge icon could not load');
 });
 
 test('legacy unfinished backups fail visibly instead of mixing rules', async ({ page }) => {

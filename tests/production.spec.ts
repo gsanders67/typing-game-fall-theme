@@ -1,4 +1,7 @@
 import { expect, test } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
+import { defaultAvatar, draw, emptyRoom, finish } from '../src/tournament/model';
+import { expectBadgeMatchesIcon } from './award-artwork';
 
 test('Express serves the game and hash invites under a runtime base path', async ({ page }) => {
   const errors: string[] = [];
@@ -40,4 +43,22 @@ test('host and player connect through the production Socket.IO base path', async
     await player.getByRole('button', { name: "I'm ready!" }).click();
     await expect(host.getByText('1 ready', { exact: true })).toBeVisible();
   } finally { await context.close(); }
+});
+
+test('downloaded badge reuses the actual favicon under a production base path', async ({ page }) => {
+  const room = emptyRoom('ART234');
+  room.players = ['Maple', 'Acorn'].map((name) => ({ id: crypto.randomUUID(), name, avatar: defaultAvatar, connected: true, ready: true }));
+  draw(room, 'artwork');
+  room.matches[0].status = 'playing';
+  finish(room, room.matches[0], Object.fromEntries(room.players.map((player, index) => [player.id, { score: 100 + index * 100, wpm: 30, accuracy: 100, best: 4 }])));
+  const backup = { format: 'leaf-private-v1', room, secrets: Object.fromEntries(room.players.map((player) => [player.id, crypto.randomUUID()])) };
+  await page.addInitScript((data) => localStorage.setItem('leaf-host-checkpoint', JSON.stringify(data)), backup);
+  await page.goto('/event/');
+  await page.getByRole('button', { name: 'Returning presenter? Restore your event', exact: true }).click();
+  await page.getByRole('button', { name: 'Restore last browser checkpoint', exact: true }).click();
+  await page.getByRole('button', { name: 'Winner awards', exact: true }).click();
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download email badge', exact: true }).click();
+  const png = await readFile((await (await download).path())!);
+  await expectBadgeMatchesIcon(page, png);
 });

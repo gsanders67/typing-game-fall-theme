@@ -2,6 +2,7 @@ import { expect, test, type Browser, type Page } from '@playwright/test';
 import { expectScreenFits } from './viewport';
 import { readFile } from 'node:fs/promises';
 import { DURATION } from '../src/game/engine';
+import { expectBadgeMatchesIcon } from './award-artwork';
 
 async function keepNetworkClock(page: Page) {
   // Synthetic game-time jumps must not expire Socket.IO's real-time heartbeat.
@@ -132,6 +133,7 @@ test('trio tournament, checkpoint restore, reconnect, dice and one champion', as
   expect(image.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
   expect(image.readUInt32BE(16)).toBe(1200);
   expect(image.readUInt32BE(20)).toBe(380);
+  await expectBadgeMatchesIcon(host, image);
   const certificateDownload = host.waitForEvent('download');
   await host.getByRole('button', { name: 'Download certificate', exact: true }).click();
   const certificate = await certificateDownload;

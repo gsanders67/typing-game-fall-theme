@@ -48,15 +48,14 @@ export async function badgePng(name: string): Promise<Blob> {
   canvas.width = 1200; canvas.height = 380;
   const context = canvas.getContext('2d');
   if (!context) throw new Error('Your browser cannot create the badge image. Try another browser.');
+  const icon = new Image();
+  icon.src = new URL('favicon.svg', document.baseURI).href;
+  try { await icon.decode(); }
+  catch (error) { throw new Error('The badge icon could not load. Check your connection and try again.', { cause: error }); }
   context.fillStyle = '#172d24';
   context.beginPath(); context.roundRect(8, 8, 1184, 364, 44); context.fill();
   context.strokeStyle = '#edda8f'; context.lineWidth = 5; context.stroke();
-  context.fillStyle = '#e8a060';
-  context.beginPath(); context.ellipse(158, 118, 36, 67, Math.PI / 4, 0, Math.PI * 2); context.fill();
-  context.fillStyle = '#edda8f';
-  context.beginPath(); context.roundRect(65, 185, 190, 96, 14); context.fill();
-  context.fillStyle = '#172d24';
-  for (let row = 0; row < 2; row++) for (let col = 0; col < 6; col++) context.fillRect(82 + col * 27, 204 + row * 26, 17, 13);
+  context.drawImage(icon, 48, 74, 224, 224);
   context.fillStyle = '#edda8f';
   fittedText(context, AWARD_TITLE, 300, 103, 47, 840);
   context.fillStyle = '#ffffff';
