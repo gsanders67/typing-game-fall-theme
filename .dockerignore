@@ -1,0 +1,13 @@
+node_modules
+dist
+.git
+.github
+.env*
+!.env.self-hosted
+deploy/relay/certs
+deploy/relay/.env
+tests
+test-results
+playwright-report
+*.tsbuildinfo
+**/*.test.ts

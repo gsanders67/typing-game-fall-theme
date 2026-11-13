@@ -7,6 +7,10 @@ on:
     paths:
       - deploy/relay/**
       - src/network/**
+      - server/**
+      - package*.json
+      - .env.self-hosted
+      - .dockerignore
       - .github/workflows/relay.yml
   workflow_dispatch:
 
@@ -18,10 +22,10 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TURN_HOST: turn.example.com
-      ICE_HOST: ice.example.com
+      APP_HOST: game.example.com
       TURN_PUBLIC_IP: 203.0.113.10
       TURN_SHARED_SECRET: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-      ALLOWED_ORIGIN: https://gsanders67.github.io
+      ALLOWED_ORIGIN: https://game.example.com
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -32,20 +36,24 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:server
       - run: docker compose -f deploy/relay/compose.yaml config --quiet
-      - run: docker compose -f deploy/relay/compose.yaml build credentials
+      - run: docker compose -f deploy/relay/compose.yaml build app
       - name: Smoke-test containers with disposable certificates
         run: |
           mkdir -p deploy/relay/certs
           openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
             -keyout deploy/relay/certs/privkey.pem -out deploy/relay/certs/fullchain.pem \
-            -subj '/CN=turn.example.com' -addext 'subjectAltName=DNS:turn.example.com,DNS:ice.example.com'
+            -subj '/CN=turn.example.com' -addext 'subjectAltName=DNS:turn.example.com,DNS:game.example.com'
           sudo chgrp -R 2000 deploy/relay/certs
           chmod 750 deploy/relay/certs
           chmod 640 deploy/relay/certs/*.pem
           docker compose -f deploy/relay/compose.yaml up -d --wait --wait-timeout 90
-          curl --fail --insecure --resolve ice.example.com:443:127.0.0.1 \
-            https://ice.example.com/ice -H 'Origin: https://gsanders67.github.io' \
+          curl --fail --insecure --resolve game.example.com:443:127.0.0.1 \
+            https://game.example.com/ | grep 'id="root"'
+          curl --fail --insecure --resolve game.example.com:443:127.0.0.1 \
+            https://game.example.com/api/ice -H 'Origin: https://game.example.com' \
             | node -e "let s='';process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>{const r=JSON.parse(s);if(!r.iceServers[0].credential)process.exit(1)})"
           openssl s_client -connect 127.0.0.1:443 -servername turn.example.com </dev/null 2>/dev/null \
             | openssl x509 -noout -subject

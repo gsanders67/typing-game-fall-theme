@@ -5,5 +5,5 @@ export default defineConfig({
   plugins: [react()],
   optimizeDeps: { include: ['peerjs', 'react', 'react-dom/client', 'zod'] },
   base: './',
-  test: { include: ['src/**/*.test.ts', 'deploy/relay/**/*.test.mjs'] },
+  test: { include: ['src/**/*.test.ts', 'server/**/*.test.ts'] },
 });

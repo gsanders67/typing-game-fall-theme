@@ -1,6 +1,6 @@
 # Leaf It On The Keyboard
 
-An original Xbox/autumn-themed typing party for **2-25 players plus one non-playing presenter**. React, TypeScript, Vite, and PeerJS; static hosting with no account or application backend.
+An original Xbox/autumn-themed typing party for **2-25 players plus one non-playing presenter**. React, TypeScript, Vite, and PeerJS, with an Express server for self-hosted web delivery and relay credentials in the same npm package.
 
 ## Run locally
 
@@ -14,6 +14,25 @@ npm run dev
 Open the address printed by Vite. Choose **Host a game**, share the six-character room code or invite link, and have players join from their own browsers. Use a separate browser profile/context when testing multiple players on one computer: tabs in the same profile deliberately share reconnect identity.
 
 Public PeerJS signaling and browser P2P are used by default. Without a configured relay, connections use STUN and require a working direct path between browsers. For players on different or restricted networks, deploy the [self-hosted TURN relay](deploy/relay/README.md) and set `VITE_ICE_SERVERS_URL`. The game fetches temporary credentials before opening a room or joining; a configured relay outage is shown as an error rather than silently falling back to direct-only connections.
+
+## Host the full game on your VPS
+
+The [Docker Compose deployment](deploy/relay/README.md) builds the React app and TypeScript Express server from this root npm package into one `leaf-type-game` image. Express serves the game and `/api/ice` from the same HTTPS origin; coturn provides the relay and HAProxy shares port 443 between HTTPS and TURN TLS. No separate frontend deployment or credential-service package is needed.
+
+To run Express without Docker on your own machine, configure an ignored root `.env` file:
+
+```text
+TURN_HOST=turn.example.com
+TURN_SHARED_SECRET=<64 hexadecimal characters generated with openssl rand -hex 32>
+ALLOWED_ORIGIN=http://127.0.0.1:3000
+```
+
+```powershell
+npm run build:self-hosted
+npm start
+```
+
+Open `http://127.0.0.1:3000`. For public hosting, use the Docker guide or configure `TLS_CERT_FILE`, `TLS_KEY_FILE`, `HOST`, and `PORT` with a matching HTTPS `ALLOWED_ORIGIN`; never publish this local HTTP configuration. A working coturn server is still required for cross-network play.
 
 ## Run the event
 
@@ -63,6 +82,7 @@ npm run build
 npx playwright install chromium
 npm run test:e2e
 npm run test:production
+npm run test:server
 ```
 
 Browser tests start a **local-only test signaling server** and Vite automatically, then stop them. No test hooks are exposed in the production bundle. Tests include live authoritative typing, malformed/unauthorized input, reconnects, checkpoint restore, all supported bracket sizes, d20 rerolls, 26-peer traffic, and a complete 25-player/four-stage event.

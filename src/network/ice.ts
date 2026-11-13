@@ -13,7 +13,9 @@ const credentialsSchema = z.object({
 export async function loadIceServers(endpoint?: string): Promise<RTCIceServer[]> {
   const stun = { urls: 'stun:stun.l.google.com:19302' };
   if (!endpoint) return [stun];
-  if (new URL(endpoint).protocol !== 'https:') throw new Error('The relay credentials URL must use HTTPS.');
+  const url = new URL(endpoint, globalThis.location?.origin);
+  const localHttp = url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+  if (url.protocol !== 'https:' && !localHttp) throw new Error('The relay credentials URL must use HTTPS.');
   try {
     const response = await fetch(endpoint, { signal: AbortSignal.timeout(10000), cache: 'no-store', credentials: 'omit' });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);

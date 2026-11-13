@@ -4,7 +4,8 @@ for (const transport of ['udp', 'tls'] as const) {
   test(`self-hosted TURN delivers relay-only data over ${transport}`, async ({ page }) => {
     test.skip(!process.env.RELAY_PREFLIGHT_URL, 'Opt-in test requires a deployed VPS and trusted certificates.');
     test.setTimeout(90000);
-    await page.goto('https://gsanders67.github.io/typing-game-fall-theme/');
+    const endpoint = process.env.RELAY_PREFLIGHT_URL!;
+    await page.goto(new URL(endpoint).origin);
     const result = await page.evaluate(async ({ endpoint, transport }) => {
       const response = await fetch(endpoint, { cache: 'no-store', credentials: 'omit' });
       if (!response.ok) throw new Error(`Relay credentials request failed: HTTP ${response.status}`);
@@ -56,7 +57,7 @@ for (const transport of ['udp', 'tls'] as const) {
           remoteType: pair && stats.get(pair.remoteCandidateId)?.candidateType,
         };
       } finally { clearTimeout(deliveryTimer); a.close(); b.close(); }
-    }, { endpoint: process.env.RELAY_PREFLIGHT_URL!, transport });
+    }, { endpoint, transport });
     expect(result).toEqual({ received: true, localType: 'relay', remoteType: 'relay' });
   });
 }

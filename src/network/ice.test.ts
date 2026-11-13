@@ -35,6 +35,14 @@ it('rejects insecure endpoints before requesting credentials', async () => {
   expect(fetcher).not.toHaveBeenCalled();
 });
 
+it('resolves the self-hosted credential endpoint against the game origin', async () => {
+  vi.stubGlobal('location', { origin: 'https://game.example.com' });
+  const fetcher = vi.fn().mockResolvedValue(Response.json(credentials()));
+  vi.stubGlobal('fetch', fetcher);
+  expect(await loadIceServers('/api/ice')).toContainEqual(relay);
+  expect(fetcher).toHaveBeenCalledWith('/api/ice', expect.any(Object));
+});
+
 it.each([
   () => new Response('Unavailable', { status: 503 }),
   () => Response.json({ ...credentials(), expiresAt: 1 }),
