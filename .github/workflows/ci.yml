@@ -1,0 +1,44 @@
+name: Validate game and Docker image
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - run: npm run test:production
+      - run: docker compose config --quiet
+      - run: docker compose build
+      - name: Smoke-test image at a runtime base URL
+        run: |
+          docker run -d --name leaf-ci -p 127.0.0.1:3000:3000 \
+            -e PUBLIC_URL=https://typing.example.com/games/fall leaf-type-game:local
+          for attempt in $(seq 1 30); do
+            curl --fail http://127.0.0.1:3000/health && break
+            sleep 2
+          done
+          curl --fail http://127.0.0.1:3000/games/fall/ | grep '<base href="/games/fall/">'
+          curl --fail 'http://127.0.0.1:3000/games/fall/socket.io/?EIO=4&transport=polling' | grep '"sid"'
+      - name: Container logs
+        if: failure()
+        run: docker logs leaf-ci || true
+      - name: Stop disposable container
+        if: always()
+        run: docker rm -f leaf-ci || true

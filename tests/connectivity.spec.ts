@@ -1,16 +1,16 @@
 import { expect, test } from '@playwright/test';
 
-test('one host handles 25 browser peers and authoritative typing traffic', async ({ browser }) => {
+test('Socket.IO handles 25 players and authoritative typing traffic', async ({ browser }) => {
   test.setTimeout(180_000);
   const context = await browser.newContext();
   const host = await context.newPage();
   await host.goto('/');
   const code = await host.evaluate(async () => {
-    const path = '/src/network/peer.ts';
+    const path = '/src/network/transport.ts';
     const enginePath = '/src/game/engine.ts';
-    const { createPeer } = await import(/* @vite-ignore */ path) as typeof import('../src/network/peer');
+    const { createTransport } = await import(/* @vite-ignore */ path) as typeof import('../src/network/transport');
     const { newBoard, input } = await import(/* @vite-ignore */ enginePath) as typeof import('../src/game/engine');
-    const peer = createPeer();
+    const peer = createTransport('TRAFF2');
     const probe = { connections: 0, batches: 0, inputs: 0, failed: false };
     Object.assign(window, { __probe: probe, __peer: peer });
     peer.on('connection', (conn) => {
@@ -32,21 +32,21 @@ test('one host handles 25 browser peers and authoritative typing traffic', async
     return await new Promise<string>((resolve, reject) => {
       peer.on('open', resolve);
       peer.on('error', reject);
-      setTimeout(() => reject(new Error('Host signaling timeout')), 15000);
+      setTimeout(() => reject(new Error('Host registration timeout')), 15000);
     });
   });
   const clients = await Promise.all(Array.from({ length: 25 }, () => context.newPage()));
   await Promise.all(clients.map(async (client) => {
     await client.goto('/');
     await client.evaluate(async (hostId) => {
-      const path = '/src/network/peer.ts';
-      const { createPeer } = await import(/* @vite-ignore */ path) as typeof import('../src/network/peer');
-      const peer = createPeer();
+      const path = '/src/network/transport.ts';
+      const { createTransport } = await import(/* @vite-ignore */ path) as typeof import('../src/network/transport');
+      const peer = createTransport();
       Object.assign(window, { __peer: peer });
       await new Promise<void>((resolve, reject) => {
         peer.on('error', reject);
         peer.on('open', () => {
-          const conn = peer.connect(hostId, { reliable: true });
+          const conn = peer.connect(hostId);
           let seq = 0;
           conn.on('error', reject);
           conn.on('open', () => conn.send({ seq: ++seq }));
@@ -55,7 +55,7 @@ test('one host handles 25 browser peers and authoritative typing traffic', async
             setTimeout(() => conn.send({ seq: ++seq }), 20);
           });
         });
-        setTimeout(() => reject(new Error('Peer traffic timed out')), 60000);
+        setTimeout(() => reject(new Error('Socket.IO traffic timed out')), 60000);
       });
     }, code);
   }));

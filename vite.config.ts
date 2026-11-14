@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  optimizeDeps: { include: ['peerjs', 'react', 'react-dom/client', 'zod'] },
+  optimizeDeps: { include: ['socket.io-client', 'react', 'react-dom/client', 'zod'] },
   base: './',
-  test: { include: ['src/**/*.test.ts'] },
+  test: { include: ['src/**/*.test.ts', 'server/**/*.test.ts'] },
 });

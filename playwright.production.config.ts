@@ -5,8 +5,9 @@ export default defineConfig({
   testMatch: '**/production.spec.ts',
   use: { baseURL: 'http://127.0.0.1:4173', headless: true },
   webServer: {
-    command: 'npm run preview -- --port 4173 --strictPort --base /event/',
+    command: 'npm start',
     port: 4173,
+    env: { PORT: '4173', BASE_PATH: '/event', PUBLIC_URL: '' },
     reuseExistingServer: false,
   },
 });
