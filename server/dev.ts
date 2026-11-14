@@ -1,8 +1,9 @@
 import { createServer } from 'vite';
 import { createGameServer } from './app.ts';
 import { readConfig } from './config.ts';
+import { roomMetadataPlugin } from './metadata.ts';
 
-const vite = await createServer({ server: { middlewareMode: true } });
+const vite = await createServer({ plugins: [roomMetadataPlugin], server: { middlewareMode: true } });
 const config = readConfig({ ...process.env, PORT: process.env.PORT || process.env.PLAYWRIGHT_PORT || '5173' });
 const server = createGameServer(config, undefined, (req, res, next) => vite.middlewares(req, res, next));
 server.http.on('error', (error) => { console.error('Development server failed:', error); process.exit(1); });

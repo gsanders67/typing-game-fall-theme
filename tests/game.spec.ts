@@ -1,5 +1,8 @@
 import { expect, test, type Browser, type Page } from '@playwright/test';
 import { expectScreenFits } from './viewport';
+import { readFile } from 'node:fs/promises';
+import { DURATION } from '../src/game/engine';
+import { expectBadgeMatchesIcon } from './award-artwork';
 
 async function keepNetworkClock(page: Page) {
   // Synthetic game-time jumps must not expire Socket.IO's real-time heartbeat.
@@ -30,12 +33,18 @@ async function player(browser: Browser, code: string, name: string, fixedTime?: 
   return { context, page };
 }
 async function breakTies(host: Page) {
+  let sawPodiumTie = false;
   for (let count = 0; count < 30; count++) {
-    const buttons = host.getByRole('button', { name: /Roll for the crown|Reroll tied leaders/ });
+    const buttons = host.getByRole('button', { name: /Roll for the crown|Reroll tied leaders|Roll for podium|Reroll podium tie/ });
     if (await buttons.count() === 0) {
       const next = host.getByRole('button', { name: 'Next matches' });
       if (await next.isVisible() && await next.isEnabled()) { await next.click(); continue; }
-      return;
+      return sawPodiumTie;
+    }
+    if (await host.getByRole('button', { name: /Roll for podium|Reroll podium tie/ }).count()) {
+      sawPodiumTie = true;
+      await expect(host.locator('.podium-place')).toHaveCount(1);
+      await expect(host.getByText('Podium tie:', { exact: true })).toBeVisible();
     }
     await buttons.first().click();
   }
@@ -65,6 +74,7 @@ test('practice supports automatic clearing, typo correction, life loss and acces
 });
 
 test('trio tournament, checkpoint restore, reconnect, dice and one champion', async ({ browser, page: host }) => {
+  await host.emulateMedia({ reducedMotion: 'reduce' });
   await keepNetworkClock(host);
   await host.clock.install();
   await host.goto('/');
@@ -99,16 +109,86 @@ test('trio tournament, checkpoint restore, reconnect, dice and one champion', as
   await expect(host.locator('.match-card.scheduled')).toHaveCount(1);
   await host.clock.runFor(5100);
   await expect(host.locator('.match-card.playing')).toHaveCount(1);
-  await host.clock.fastForward(62000);
+  await host.clock.fastForward(DURATION + 2000);
   await expect(host.getByRole('button', { name: 'Roll for the crown' })).toBeVisible();
-  await breakTies(host);
-  await expect(host.locator('.champion-banner h2')).toBeVisible();
-  await expect(host.locator('.champion-banner')).toContainText('Type Night champion');
-  await host.getByRole('tab', { name: 'Leaderboard' }).click();
-  await expect(host.getByRole('cell', { name: '#1', exact: true })).toHaveCount(1);
-  await expect(host.getByRole('cell', { name: '#2', exact: true })).toHaveCount(2);
+  expect(await breakTies(host)).toBe(true);
+  await expect(host.locator('.podium-place')).toHaveCount(3);
+  await expect(host.locator('.championship-results')).toContainText('GDS #1 Best Keyboard Warrior');
+  const winner = await host.locator('.place-1 .podium-name').innerText();
+  await expectScreenFits(host);
+  for (const place of [1, 2, 3]) await expect(host.locator(`.place-${place}`)).toHaveCSS('opacity', '1');
+  await host.screenshot({ path: 'test-results/championship-podium.png', animations: 'disabled' });
+  const winnerClient = clients[['Acorn', 'Maple', 'Fern'].indexOf(winner)].page;
+  await expect(winnerClient.getByRole('button', { name: 'Winner awards', exact: true })).toBeVisible();
+  for (let i = 0; i < clients.length; i++) {
+    if (['Acorn', 'Maple', 'Fern'][i] !== winner) await expect(clients[i].page.getByRole('button', { name: 'Winner awards', exact: true })).toHaveCount(0);
+  }
+  await host.getByRole('button', { name: 'Winner awards', exact: true }).click();
+  const badgeDownload = host.waitForEvent('download');
+  await host.getByRole('button', { name: 'Download email badge', exact: true }).click();
+  const badge = await badgeDownload;
+  await badge.saveAs('test-results/championship-badge.png');
+  expect(badge.suggestedFilename()).toMatch(/gds-keyboard-warrior-.*\.png$/);
+  const image = await readFile((await badge.path())!);
+  expect(image.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
+  expect(image.readUInt32BE(16)).toBe(1200);
+  expect(image.readUInt32BE(20)).toBe(380);
+  await expectBadgeMatchesIcon(host, image);
+  const certificateDownload = host.waitForEvent('download');
+  await host.getByRole('button', { name: 'Download certificate', exact: true }).click();
+  const certificate = await certificateDownload;
+  const certificateText = await readFile((await certificate.path())!, 'utf8');
+  expect(certificateText).toContain(winner);
+  expect(certificateText).toContain('2026 Fall Faster Finger Championship');
+  const certificatePage = await host.context().newPage();
+  await certificatePage.setContent(certificateText);
+  await certificatePage.emulateMedia({ media: 'print' });
+  const pdf = await certificatePage.pdf({ path: 'test-results/championship-certificate.pdf', preferCSSPageSize: true });
+  expect(pdf.toString('latin1').match(/\/Type\s*\/Page\b/g)).toHaveLength(1);
+  await certificatePage.screenshot({ path: 'test-results/championship-certificate.png', fullPage: true });
+  await certificatePage.close();
+  const preview = host.frameLocator('iframe[title="Winner certificate preview"]');
+  await expect(preview.getByRole('heading', { name: 'GDS #1 Best Keyboard Warrior' })).toBeVisible();
+  await preview.locator('body').evaluate(() => { window.print = () => { document.body.dataset.printed = 'true'; }; });
+  await host.getByRole('button', { name: 'Print / Save as PDF', exact: true }).click();
+  await expect(preview.locator('body')).toHaveAttribute('data-printed', 'true');
+  await host.getByRole('button', { name: 'Close Winner awards', exact: true }).click();
+  for (const width of [1280, 1024, 390]) {
+    await host.setViewportSize({ width, height: width === 390 ? 844 : 720 });
+    await expectScreenFits(host);
+  }
+  await host.setViewportSize({ width: 1280, height: 720 });
+  // Restore with a fresh real clock after the synthetic tournament-time jumps.
+  const restoredContext = await browser.newContext({ storageState: await host.context().storageState() });
+  const restoredHost = await restoredContext.newPage();
+  await host.close();
+  await restoredHost.goto('/');
+  await restoredHost.getByRole('button', { name: 'Returning presenter? Restore your event', exact: true }).click();
+  await restoredHost.getByRole('button', { name: 'Restore last browser checkpoint', exact: true }).click();
+  await expect(restoredHost.locator('.place-1 .podium-name')).toHaveText(winner);
+  await restoredHost.reload();
+  await restoredHost.getByRole('button', { name: 'Returning presenter? Restore your event', exact: true }).click();
+  await restoredHost.getByRole('button', { name: 'Restore last browser checkpoint', exact: true }).click();
+  await expect(restoredHost.locator('.podium-place')).toHaveCount(3);
+  await expect(restoredHost.getByRole('button', { name: /Roll for podium|Reroll podium tie/ })).toHaveCount(0);
+  await restoredHost.getByRole('button', { name: 'Bracket & standings', exact: true }).click();
+  await restoredHost.getByRole('tab', { name: 'Leaderboard' }).click();
+  await expect(restoredHost.getByRole('cell', { name: '#1', exact: true })).toHaveCount(1);
+  await expect(restoredHost.getByRole('cell', { name: '#2', exact: true })).toHaveCount(1);
+  await expect(restoredHost.getByRole('cell', { name: '#3', exact: true })).toHaveCount(1);
+  expect(await restoredHost.evaluate(async () => {
+    const path = '/src/state/session.ts';
+    const { session } = await import(/* @vite-ignore */ path) as typeof import('../src/state/session');
+    const before = session.getSnapshot().room!;
+    if (!before.podiumRolls.length) throw new Error('Expected persisted podium dice history.');
+    const seed = before.matches[0].seed;
+    session.replay('r0m0');
+    const after = session.getSnapshot().room!;
+    return { rolls: after.podiumRolls, phase: after.phase, sameSeed: after.matches[0].seed === seed };
+  })).toEqual({ rolls: [], phase: 'tournament', sameSeed: true });
   expect(JSON.parse(backup).format).toBe('leaf-private-v1');
   for (const client of clients) await client.context.close();
+  await restoredContext.close();
 });
 
 test('25-player fixed bracket completes four simultaneous stages with one champion', async ({ browser, page: host }) => {
@@ -194,12 +274,13 @@ test('25-player fixed bracket completes four simultaneous stages with one champi
       await clients[0].page.getByRole('button', { name: 'Reconnect', exact: true }).click();
       await expect(clients[0].page.getByRole('button', { name: 'Reconnect', exact: true })).not.toBeVisible();
     }
-    await advanceTime(62000);
+    await advanceTime(DURATION + 2000);
     await expect(host.getByRole('button', { name: 'Roll for the crown' }).first()).toBeVisible();
     await expectScreenFits(host);
     await breakTies(host);
   }
-  await expect(host.locator('.champion-banner h2')).toHaveCount(1);
+  await expect(host.locator('.podium-place')).toHaveCount(3);
+  await host.getByRole('button', { name: 'Bracket & standings', exact: true }).click();
   await host.getByRole('tab', { name: 'Leaderboard' }).click();
   await expect(host.getByRole('cell', { name: '#1', exact: true })).toHaveCount(1);
   await expect(host.locator('tbody tr')).toHaveCount(5);

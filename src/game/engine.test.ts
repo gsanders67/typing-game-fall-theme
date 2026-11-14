@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { advance, DURATION, input, multiplier, newBoard, stats, type Board } from './engine';
+import { advance, DURATION, input, multiplier, newBoard, PRESETS, promptAt, stats, type Board } from './engine';
+import { VOCABULARY } from './vocabulary';
 
 function target(board: Board, text = 'game') {
   board.targets = [{ id: board.spawned++, text, born: board.now, fall: 9000, lane: 0.3 }];
@@ -73,13 +74,37 @@ describe('typing rules', () => {
   });
   it('rejects completions at the deadline and does not award partial targets', () => {
     const board = newBoard('deadline');
-    board.now = 59900;
+    board.now = DURATION - 100;
     target(board);
-    for (const key of 'gam') input(board, key, 59900, 'Acorn');
-    input(board, 'e', 60000, 'Acorn');
+    for (const key of 'gam') input(board, key, DURATION - 100, 'Acorn');
+    input(board, 'e', DURATION, 'Acorn');
     expect(board.score).toBe(0);
     expect(board.ended).toBe(true);
     expect(stats(board).wpm).toBe(1);
     expect(stats(newBoard('empty')).accuracy).toBeNull();
+  });
+  it('normalizes WPM over the full round even after early life loss', () => {
+    const board = newBoard('wpm');
+    board.correct = 50;
+    board.ended = true;
+    board.now = 10000;
+    expect(stats(board).wpm).toBe(20);
+  });
+  it.each(PRESETS)('uses diverse shuffled decks without repeats or invalid input in %s', (preset) => {
+    const pool = VOCABULARY[preset];
+    expect(pool.length).toBeGreaterThanOrEqual(60);
+    expect(new Set(pool).size).toBe(pool.length);
+    expect(pool.every((word) => /^[a-z]+(?: [a-z]+)*$/.test(word))).toBe(true);
+    for (const seed of [1, 42, 12345]) {
+      for (let cycle = 0; cycle < 3; cycle++) {
+        const deck = Array.from({ length: pool.length }, (_, i) => promptAt(seed, cycle * pool.length + i, preset));
+        expect(new Set(deck).size).toBe(pool.length);
+        if (cycle) expect(deck[0]).not.toBe(promptAt(seed, cycle * pool.length - 1, preset));
+      }
+      const round = Array.from({ length: 20 }, (_, i) => promptAt(seed, i, preset));
+      expect(new Set(round).size).toBe(round.length);
+      expect(round).toEqual(Array.from({ length: 20 }, (_, i) => promptAt(seed, i, preset)));
+      expect(round).not.toEqual(Array.from({ length: 20 }, (_, i) => promptAt(seed + 1, i, preset)));
+    }
   });
 });

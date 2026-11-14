@@ -3,11 +3,9 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import express, { type ErrorRequestHandler, type RequestHandler } from 'express';
+import { escapeHtml, renderRoomMetadata } from './metadata.ts';
 import { attachRooms } from './rooms.ts';
 import type { ServerConfig } from './config.ts';
-
-const escapeHtml = (value: string) => value.replace(/[&"<>]/g, (char) =>
-  ({ '&': '&amp;', '"': '&quot;', '<': '&lt;', '>': '&gt;' })[char]!);
 
 export function createGameServer(
   config: ServerConfig,
@@ -23,10 +21,11 @@ export function createGameServer(
   app.get('/health', (_req, res) => { res.setHeader('Cache-Control', 'no-store'); res.send('ok'); });
   if (config.basePath) app.get(config.basePath, (req, res) => res.redirect(308, `${config.basePath}/${new URL(req.originalUrl, 'http://localhost').search}`));
   router.get('/health', (_req, res) => { res.setHeader('Cache-Control', 'no-store'); res.send('ok'); });
-  router.get(['/', '/index.html'], async (_req, res) => {
+  router.get(['/', '/index.html'], async (req, res) => {
     const html = await readFile(join(staticDir, 'index.html'), 'utf8');
     res.setHeader('Cache-Control', 'no-store');
-    res.type('html').send(html.replace('<head>', `<head><base href="${escapeHtml(config.basePath)}/">`));
+    res.type('html').send(renderRoomMetadata(html, req.originalUrl)
+      .replace('<head>', `<head><base href="${escapeHtml(config.basePath)}/">`));
   });
   router.use(express.static(staticDir, { index: false, dotfiles: 'deny', maxAge: 0 }));
   app.use(config.basePath || '/', router);

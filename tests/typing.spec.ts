@@ -23,14 +23,13 @@ test('host validates live typing, reconnect identity, stale input and forged con
   await expect(fox.getByText('FINGERS ON KEYS')).not.toBeVisible({ timeout: 10000 });
   const word = await fox.getByTestId('falling-target').first().innerText();
   await fox.getByLabel('Type falling words').pressSequentially(word, { delay: 50 });
-  await expect(host.getByRole('article', { name: 'Match r0m0' })).toContainText(`${word.length * 10}`);
-  const authoritativeScore = await host.evaluate(async () => {
+  const authoritativeScore = word.length * 10;
+  await expect.poll(() => host.evaluate(async () => {
     const path = '/src/state/session.ts';
     const { session } = await import(/* @vite-ignore */ path) as typeof import('../src/state/session');
     const id = session.getSnapshot().room!.players.find((player) => player.name === 'Quick Fox')!.id;
     return session.liveStats(id)!.score;
-  });
-  expect(authoritativeScore).toBe(word.length * 10);
+  })).toBe(authoritativeScore);
   await expect.poll(() => fox.evaluate(async () => {
     const path = '/src/state/session.ts';
     const { session } = await import(/* @vite-ignore */ path) as typeof import('../src/state/session');

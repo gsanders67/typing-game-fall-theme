@@ -1,18 +1,18 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent, type KeyboardEvent } from 'react';
 import { advance, DURATION, input, multiplier, newBoard, PRESETS, stats, type Board, type Difficulty } from './game/engine';
-import { defaultAvatar, placement, resolvePlayers, type AvatarConfig, type Match, type Room } from './tournament/model';
+import { defaultAvatar, finalStandings, placement, resolvePlayers, type AvatarConfig, type Match, type Room } from './tournament/model';
 import { session } from './state/session';
 import { Avatar } from './ui/Avatar';
 import { Icon } from './ui/Icon';
 import { ambientMusic, playTone } from './ui/sound';
 import { AnimatePresence, motion } from 'motion/react';
 import { Button, Pager, PartyMotion, Screen, ToolsDialog } from './ui/Party';
+import { Podium } from './ui/Podium';
+import { downloadFile } from './ui/awards';
+import { isRoomCode, joinRoomTitle, roomFromUrl, roomInviteUrl, SITE_TITLE } from './network/invites';
 
 function download(name: string, value: string) {
-  const url = URL.createObjectURL(new Blob([value], { type: 'application/json' }));
-  const link = document.createElement('a');
-  link.href = url; link.download = name; link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  downloadFile(name, new Blob([value], { type: 'application/json' }));
 }
 function useClock(active: boolean) {
   const [now, setNow] = useState(Date.now);
@@ -40,11 +40,12 @@ export function App() {
   const [settings, setSettings] = useState(getSettings);
   const [view, setView] = useState<'home' | 'join'>('home');
   const [name, setName] = useState('');
-  const [code, setCode] = useState(() => new URLSearchParams(location.hash.slice(1)).get('room') || '');
+  const [code, setCode] = useState(() => roomFromUrl(new URL(location.href)));
   const [avatar, setAvatar] = useState<AvatarConfig>(defaultAvatar);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [tab, setTab] = useState<'bracket' | 'leaderboard'>('bracket');
+  const [resultsDetails, setResultsDetails] = useState(false);
   const [practice, setPractice] = useState<{ board: Board; start: number; preset: Difficulty }>();
   const [practicePreset, setPracticePreset] = useState<Difficulty>('Acorn');
   const room = state.room;
@@ -61,6 +62,9 @@ export function App() {
   const showGame = !!board && (!!practice || competitive);
   const previous = useRef({ score: 0, lives: 3, champion: '' });
   const activeChampion = room?.phase === 'finished' ? room.matches.at(-1)?.winner || '' : '';
+  const pageTitle = room ? `${room.phase === 'finished' ? 'Results for room' : 'Room'} ${room.code} | Leaf It On The Keyboard`
+    : isRoomCode(code) ? joinRoomTitle(code) : SITE_TITLE;
+  useEffect(() => { document.title = pageTitle; }, [pageTitle]);
   useEffect(() => {
     if (board && !settings.muted) {
       if (board.score > previous.current.score) playTone('clear', settings.volume);
@@ -119,11 +123,11 @@ export function App() {
     <AnimatePresence mode="wait" initial={false}>
     {!room && !showGame && (view === 'home' && !code ? <Screen key="landing" className="landing">
       <section className="hero-copy">
-        <div className="eyebrow"><span className="live-dot"/> A LITTLE FRIENDLY KEYBOARD CHAOS</div>
+        <div className="eyebrow"><img className="site-emblem" src="./favicon.svg" alt="Leaf and keyboard"/> A LITTLE FRIENDLY KEYBOARD CHAOS</div>
         <h1>Big fall energy.<br/>Fast fingers.<br/><em>One champion.</em></h1>
         <p className="hero-description">The leaves are falling. So are the words.<br/>Outtype your teammates in a cozy, chaotic<br className="desktop-break"/> race for the autumn crown.</p>
         <div className="hero-actions"><Button className="primary large" onClick={() => setView('join')}>Join the fun <Icon name="arrow"/></Button><Button className="secondary large" disabled={busy} onClick={() => void run(() => session.host())}>{busy ? 'Connecting...' : 'Host a game'}</Button></div>
-        <div className="hero-facts"><span><Icon name="bolt" size={16}/> 60-second showdowns</span><span><Icon name="crown" size={16}/> Up to 25 players</span></div>
+        <div className="hero-facts"><span><Icon name="bolt" size={16}/> {DURATION / 1000}-second showdowns</span><span><Icon name="crown" size={16}/> Up to 25 players</span></div>
         <Button className="text-button practice-link" onClick={startPractice}>Just warming up? Try a practice round <span aria-hidden="true">&#8599;</span></Button>
       </section>
       <section className="hero-art" aria-label="Autumn woodland typing party">
@@ -141,7 +145,7 @@ export function App() {
         <div className="combo-sticker"><Icon name="bolt" size={27}/><div>COZY COMBO<span>FALL HARD. TYPE FAST.</span></div></div>
         <div className="key-row" aria-hidden="true">{['F', 'A', 'L', 'L'].map((key, index) => <kbd key={index}>{key}</kbd>)}</div>
       </section>
-      <section className="how-strip"><div><b>01</b><span>Pick your woodland alter ego<small>A tiny face. A big competitive streak.</small></span></div><div><b>02</b><span>Catch words. Stack combos.<small>Three lives. Sixty seconds. No pressure.</small></span></div><div><b>03</b><span>Climb the bracket<small>One final crown. Endless bragging rights.</small></span></div></section>
+      <section className="how-strip"><div><b>01</b><span>Pick your woodland alter ego<small>A tiny face. A big competitive streak.</small></span></div><div><b>02</b><span>Catch words. Stack combos.<small>Three lives. {DURATION / 1000} seconds. No pressure.</small></span></div><div><b>03</b><span>Climb the bracket<small>One final crown. Endless bragging rights.</small></span></div></section>
       <Restore onRestore={(value) => void run(() => session.host(value))} busy={busy}/>
     </Screen> : <Screen key="join" className="join-layout">
       <section className="join-intro"><div className="eyebrow">YOUR AUTUMN ALTER EGO</div><h1>Small creature.<br/><em>Big type energy.</em></h1><p>Build your character, grab your room code,<br/>and settle into the lobby.</p><div className="avatar-preview"><Avatar config={avatar} size={230}/><span className="preview-shadow"/></div><span className="name-tag">{name || 'Your future champion'}</span></section>
@@ -159,24 +163,25 @@ export function App() {
       </form>
     </Screen>)}
 
-    {room && !showGame && <Screen key="room" className="room-main">
-      <div className="room-title"><div><div className="eyebrow">{state.role === 'host' ? 'PRESENTER DESK' : `WELCOME, ${me?.name.toUpperCase() || 'FRIEND'}`}</div><h1>{room.phase === 'lobby' ? 'The gathering place.' : room.phase === 'finished' ? 'All hail the fast fingers.' : 'The race for the crown.'}</h1></div><div className="room-code"><small>JOIN AT THIS SITE WITH CODE</small><strong>{room.code}</strong><Button className="text-button" onClick={() => void run(() => navigator.clipboard.writeText(`${location.origin}${location.pathname}#room=${room.code}`))}>Copy invite link</Button></div></div>
+    {room && !showGame && <Screen key="room" className={`room-main${room.phase === 'finished' && !resultsDetails ? ' showing-podium' : ''}`}>
+      <div className="room-title"><div><div className="eyebrow">{state.role === 'host' ? 'PRESENTER DESK' : `WELCOME, ${me?.name.toUpperCase() || 'FRIEND'}`}</div><h1>{room.phase === 'lobby' ? 'The gathering place.' : room.phase === 'finished' ? 'All hail the fast fingers.' : 'The race for the crown.'}</h1></div><div className="room-code"><small>JOIN AT THIS SITE WITH CODE</small><strong>{room.code}</strong><Button className="text-button" onClick={() => void run(() => navigator.clipboard.writeText(roomInviteUrl(location.href, room.code)))}>Copy invite link</Button></div></div>
       {room.phase === 'lobby' ? <div className="lobby-grid">
         <Roster room={room} host={state.role === 'host'} run={run}/>
         <aside className="sidebar">
-          <section className="panel rules-panel"><div className="mini-icon"><Icon name="leaf" size={26}/></div><h2>Here's the short version.</h2><p>Type falling words before they cross the line. Clear targets to build your combo. Keep your three lives.</p><ul><li><b>60 seconds</b> to make it count</li><li><b>Top score</b> advances from each match</li><li><b>Tied?</b> Let the d20 decide</li><li><b>One crown.</b> Bring your best keyboard.</li></ul>
+          <section className="panel rules-panel"><div className="mini-icon"><Icon name="leaf" size={26}/></div><h2>Here's the short version.</h2><p>Type falling words before they cross the line. Clear targets to build your combo. Keep your three lives.</p><ul><li><b>{DURATION / 1000} seconds</b> to make it count</li><li><b>Top score</b> advances from each match</li><li><b>Tied?</b> Let the d20 decide</li><li><b>One crown.</b> Bring your best keyboard.</li></ul>
             {state.role === 'host' ? <Button className="primary full" disabled={busy || room.players.length < 2 || room.players.some((player) => !player.ready || !player.connected)} onClick={() => void run(() => session.draw())}>Lock roster & draw bracket<Icon name="arrow"/></Button> : <Button className="primary full" disabled={!state.connected} onClick={() => session.ready(!me?.ready)}>{me?.ready ? 'Actually, one moment...' : "I'm ready!"}</Button>}
             <p className="form-note">{state.role === 'host' ? 'Everyone must be connected and ready. Drawing locks the roster.' : 'The presenter starts the round. Stay on this tab.'}</p>
           </section><PracticeCard preset={practicePreset} setPreset={setPracticePreset} start={startPractice}/>{state.role === 'host' && <Backups room={room}/>}
         </aside>
       </div> : <>
-        {room.phase === 'finished' && <Champion room={room}/>}
+        {room.phase === 'finished' && <div className="results-navigation"><Button className="secondary" onClick={() => setResultsDetails(!resultsDetails)}>{resultsDetails ? 'Show podium' : 'Bracket & standings'}</Button>{state.role === 'host' && !resultsDetails && <Backups room={room}/>} {!resultsDetails && <ToolsDialog label="Event history"><History room={room}/></ToolsDialog>}</div>}
+        {room.phase === 'finished' && !resultsDetails && <Podium room={room} host={state.role === 'host'} playerId={state.playerId} run={run}/>}
         {state.role === 'host' && room.phase === 'tournament' && <HostControls room={room} busy={busy} run={run}/>}
-        {state.role === 'player' && <div className="player-status-strip"><Avatar config={me?.avatar || defaultAvatar} size={60}/><div><strong>{eliminated ? 'Your typing run is complete. Your cheering run starts now.' : 'Your next showdown is getting ready.'}</strong><p>{eliminated ? 'Follow the bracket or warm up in practice. Your tournament scores are locked.' : 'Keep this tab open. The presenter will launch your next match.'}</p></div>{!competitive && <Button className="secondary" onClick={startPractice}>Practice round</Button>}</div>}
-        <div className="tournament-grid"><section>
+        {state.role === 'player' && room.phase !== 'finished' && <div className="player-status-strip"><Avatar config={me?.avatar || defaultAvatar} size={60}/><div><strong>{eliminated ? 'Your typing run is complete. Your cheering run starts now.' : 'Your next showdown is getting ready.'}</strong><p>{eliminated ? 'Follow the bracket or warm up in practice. Your tournament scores are locked.' : 'Keep this tab open. The presenter will launch your next match.'}</p></div>{!competitive && <Button className="secondary" onClick={startPractice}>Practice round</Button>}</div>}
+        {(room.phase !== 'finished' || resultsDetails) && <div className="tournament-grid"><section>
           <div className="tabs" role="tablist" aria-label="Tournament views"><Button role="tab" aria-selected={tab === 'bracket'} className={tab === 'bracket' ? 'active' : ''} onClick={() => setTab('bracket')}>The bracket</Button><Button role="tab" aria-selected={tab === 'leaderboard'} className={tab === 'leaderboard' ? 'active' : ''} onClick={() => setTab('leaderboard')}>Leaderboard</Button></div>
           {tab === 'bracket' ? <Bracket key={room.round} room={room} host={state.role === 'host'} now={now} run={run}/> : <Leaderboard room={room}/>}
-        </section><aside className="sidebar"><section className="panel"><div className="eyebrow">THE ROAD TO GLORY</div><h2>{room.players.length} players.<br/>One autumn crown.</h2><p className="muted">Identical challenges within every match. No second chances, except when the dice say so.</p><div className="stage-list">{Array.from(new Set(room.matches.map((item) => item.round))).map((round) => <div key={round} className={round === room.round ? 'current' : ''}><span>Stage {round + 1}</span><b>{room.matches.filter((item) => item.round === round).length} {round === room.matches.at(-1)?.round ? 'final' : 'matches'}</b></div>)}</div></section>{state.role === 'host' && <Backups room={room}/>}<ToolsDialog label="Event history"><History room={room}/></ToolsDialog></aside></div>
+        </section><aside className="sidebar"><section className="panel"><div className="eyebrow">THE ROAD TO GLORY</div><h2>{room.players.length} players.<br/>One autumn crown.</h2><p className="muted">Identical challenges across every match in a stage. No second chances, except when the dice say so.</p><div className="stage-list">{Array.from(new Set(room.matches.map((item) => item.round))).map((round) => <div key={round} className={round === room.round ? 'current' : ''}><span>Stage {round + 1}</span><b>{room.matches.filter((item) => item.round === round).length} {round === room.matches.at(-1)?.round ? 'final' : 'matches'}</b></div>)}</div></section>{state.role === 'host' && <Backups room={room}/>}<ToolsDialog label="Event history"><History room={room}/></ToolsDialog></aside></div>}
       </>}
     </Screen>}
 
@@ -188,7 +193,7 @@ export function App() {
         return <div className={id === me?.id ? 'you' : ''} key={id}><Avatar config={player.avatar} size={45}/><span>{player.name}{id === me?.id ? ' (you)' : ''}<small>{live?.score || 0} pts {!player.connected && ' / offline'}</small></span></div>;
       })}</div>}
       <GameBoard board={board} elapsed={now - gameStart} onKey={type} connected={!competitive || state.connected} preset={gamePreset} arming={match?.status === 'arming'}/>
-      {board.ended && <div className="result-banner"><Icon name="crown" size={28}/><div><h2>{board.lives === 0 ? 'Out of leaves. Still full of spirit.' : 'And... keyboards down!'}</h2><p>{board.score} points / {stats(board).wpm} WPM / {stats(board).accuracy ?? '--'}% accuracy. {competitive ? 'Your score is locked. The match ends at 60 seconds.' : 'Practice scores never affect the tournament.'}</p></div>{!competitive && <Button className="primary" onClick={startPractice}>One more round</Button>}</div>}
+      {board.ended && <div className="result-banner"><Icon name="crown" size={28}/><div><h2>{board.lives === 0 ? 'Out of leaves. Still full of spirit.' : 'And... keyboards down!'}</h2><p>{board.score} points / {stats(board).wpm} WPM / {stats(board).accuracy ?? '--'}% accuracy. {competitive ? `Your score is locked. The match ends at ${DURATION / 1000} seconds.` : 'Practice scores never affect the tournament.'}</p></div>{!competitive && <Button className="primary" onClick={startPractice}>One more round</Button>}</div>}
       {!competitive && <div className="practice-presets"><label>Next practice difficulty<select value={practicePreset} onChange={(event) => setPracticePreset(event.target.value as Difficulty)}>{PRESETS.map((preset) => <option key={preset}>{preset}</option>)}</select></label></div>}
     </Screen>}
     </AnimatePresence>
@@ -264,23 +269,18 @@ function MatchCard({ room, match, host, now, run }: { room: Room; match: Match; 
     {roll && <div className="dice-results" key={match.rolls.length}>{Object.entries(roll).map(([id, value]) => <span key={id}><Icon name="dice" size={17}/>{room.players.find((player) => player.id === id)?.name}: <b>{value}</b></span>)}</div>}
     {host && match.status === 'tie' && <Button className="dice-button" onClick={() => void run(() => session.dice(match.id))}><Icon name="dice"/>{roll ? 'Reroll tied leaders' : 'Roll for the crown'}</Button>}
     {host && match.status !== 'pending' && <Button className="text-button replay" onClick={() => {
-      if (confirm(`Void ${match.id} and dependent results? This also resets all unfinished matches. Everyone in affected matches replays with a fresh seed.`)) void run(() => session.replay(match.id));
+      if (confirm(`Void ${match.id} and dependent results? This also resets all unfinished matches and podium decisions. Replays keep the shared stage prompts for fairness.`)) void run(() => session.replay(match.id));
     }}>Void & replay</Button>}
   </article>;
 }
 function Leaderboard({ room }: { room: Room }) {
   const [page, setPage] = useState(0);
-  const players = room.players.slice().sort((a, b) => (placement(room, a.id) || 0) - (placement(room, b.id) || 0) || a.name.localeCompare(b.name));
+  const players = room.phase === 'finished' ? finalStandings(room) : room.players.slice().sort((a, b) => (placement(room, a.id) || 0) - (placement(room, b.id) || 0) || a.name.localeCompare(b.name));
   return <section className="panel leaderboard"><div className="panel-heading"><h2>The forest standings</h2><span className="muted">{players.length} players / placement first</span></div><div className="table-scroll"><table><thead><tr><th>Place</th><th>Player</th><th>Round scores</th><th>Best WPM</th><th>Accuracy</th><th>Best streak</th></tr></thead><tbody>{players.slice(page * 5, page * 5 + 5).map((player) => {
     const results = room.matches.flatMap((match) => match.results[player.id] ? [match.results[player.id]] : []);
     const ranked = placement(room, player.id);
     return <tr key={player.id}><td>{ranked ? `#${ranked}` : 'In play'}</td><td><span className="table-player"><Avatar config={player.avatar} size={42}/>{player.name}</span></td><td>{results.map((result) => result.score).join(' / ') || '--'}</td><td>{results.length ? Math.max(...results.map((result) => result.wpm)) : '--'}</td><td>{results.at(-1)?.accuracy != null ? `${results.at(-1)!.accuracy}%` : '--'}</td><td>{results.length ? Math.max(...results.map((result) => result.best)) : '--'}</td></tr>;
-  })}</tbody></table></div><Pager page={page} pages={Math.ceil(players.length / 5)} onPage={setPage}/><p className="form-note">Same-stage eliminations share placement. Accuracy: last round. WPM: full minute.</p></section>;
-}
-function Champion({ room }: { room: Room }) {
-  const player = room.players.find((item) => item.id === room.matches.at(-1)?.winner);
-  if (!player) return null;
-  return <section className="champion-banner"><div className="confetti" aria-hidden="true">{Array.from({ length: 18 }, (_, i) => <i key={i} style={{ left: `${i * 6}%`, animationDelay: `${(i % 5) * -0.5}s` }}/>)}</div><Avatar config={player.avatar} size={135} champion/><div><div className="eyebrow"><Icon name="crown" size={16}/> THE AUTUMN CROWN HAS A NEW HOME</div><h2>{player.name}</h2><p>Fast fingers. Legendary fall energy. Your Type Night champion.</p></div><Icon name="crown" size={68}/></section>;
+  })}</tbody></table></div><Pager page={page} pages={Math.ceil(players.length / 5)} onPage={setPage}/><p className="form-note">Final podium: stage, score, WPM, accuracy, streak, then d20. Other eliminations share placement. Accuracy: last round. WPM: full round.</p></section>;
 }
 function GameBoard({ board, elapsed, onKey, connected, preset, arming = false }: { board: Board; elapsed: number; onKey: (key: string) => void; connected: boolean; preset: Difficulty; arming?: boolean }) {
   const ref = useRef<HTMLInputElement>(null);

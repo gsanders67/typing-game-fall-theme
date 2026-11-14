@@ -39,6 +39,7 @@ const matchSchema = z.object({
 export type Match = z.infer<typeof matchSchema>;
 export const roomSchema = z.object({
   version: z.literal(1),
+  rulesVersion: z.literal(2).optional(),
   code: z.string().regex(/^[A-HJ-NP-Z2-9]{6}$/),
   revision: z.number().int().nonnegative(),
   phase: z.enum(['lobby', 'tournament', 'finished']),
@@ -46,10 +47,11 @@ export const roomSchema = z.object({
   matches: z.array(matchSchema).max(24),
   round: z.number().int().min(0).max(4),
   audit: z.array(z.string().max(200)).max(500),
+  podiumRolls: z.array(z.record(z.string().uuid(), z.number().int().min(1).max(20))).max(1000).default([]),
 });
 export type Room = z.infer<typeof roomSchema>;
 export function emptyRoom(code: string): Room {
-  return { version: 1, code, revision: 0, phase: 'lobby', players: [], matches: [], round: 0, audit: [] };
+  return { version: 1, rulesVersion: 2, code, revision: 0, phase: 'lobby', players: [], matches: [], round: 0, audit: [], podiumRolls: [] };
 }
 export function log(room: Room, text: string) {
   room.audit = [...room.audit.slice(-499), text.slice(0, 200)];
@@ -75,7 +77,7 @@ export function draw(room: Room, seed: string) {
       const group = sources.slice(cursor, cursor + size);
       room.matches.push({
         id, round, sources: group, players: round === 0 ? group : [], status: 'pending',
-        startAt: 0, seed: `${seed}-${id}`,
+        startAt: 0, seed: `${seed}-stage-${round}`,
         preset: PRESETS[stages === 1 ? 3 : Math.round(round * 3 / (stages - 1))],
         results: {}, rolls: [],
       });
@@ -139,13 +141,60 @@ export function completeTournament(room: Room) {
 export function placement(room: Room, id: string): number | null {
   if (room.phase === 'lobby') return null;
   if (room.phase === 'finished' && room.matches.at(-1)?.winner === id) return 1;
+  if (room.phase === 'finished' && !podiumContenders(room).length) {
+    const rank = finalStandings(room).findIndex((player) => player.id === id);
+    if (rank >= 0 && rank < 3) return rank + 1;
+    if (rank >= 3) {
+      const lost = room.matches.find((match) => match.status === 'done' && match.players.includes(id) && match.winner !== id);
+      return Math.max(4, room.matches.filter((match) => match.round === lost?.round).length + 1);
+    }
+  }
   const lost = room.matches.find((match) => match.status === 'done' && match.players.includes(id) && match.winner !== id);
   if (!lost) return null;
   return room.matches.filter((match) => match.round === lost.round).length + 1;
 }
+function compareFinal(room: Room, a: string, b: string): number {
+  const champion = room.matches.at(-1)?.winner;
+  if (a === champion) return b === champion ? 0 : -1;
+  if (b === champion) return 1;
+  const last = (id: string) => room.matches.filter((match) => match.status === 'done' && match.players.includes(id)).at(-1);
+  const am = last(a), bm = last(b);
+  const ar = am?.results[a], br = bm?.results[b];
+  const metrics = (bm?.round ?? -1) - (am?.round ?? -1)
+    || (br?.score ?? 0) - (ar?.score ?? 0)
+    || (br?.wpm ?? 0) - (ar?.wpm ?? 0)
+    || (br?.accuracy ?? -1) - (ar?.accuracy ?? -1)
+    || (br?.best ?? 0) - (ar?.best ?? 0);
+  if (metrics) return metrics;
+  for (const roll of room.podiumRolls) {
+    if (roll[a] !== undefined && roll[b] !== undefined && roll[a] !== roll[b]) return roll[b] - roll[a];
+  }
+  return 0;
+}
+export function finalStandings(room: Room): Player[] {
+  return room.players.slice().sort((a, b) => compareFinal(room, a.id, b.id));
+}
+export function podiumContenders(room: Room): string[] {
+  if (room.phase !== 'finished') return [];
+  const players = finalStandings(room);
+  for (let index = 1; index < Math.min(3, players.length); index++) {
+    const group = players.filter((player) => compareFinal(room, player.id, players[index].id) === 0);
+    if (group.length > 1) return group.map((player) => player.id);
+  }
+  return [];
+}
+export function rollPodium(room: Room, roll: () => number = d20) {
+  const tied = podiumContenders(room);
+  if (!tied.length) throw new Error('No unresolved podium tie.');
+  if (room.podiumRolls.length >= 1000) throw new Error('Podium roll limit reached. Export a backup before continuing.');
+  const values = Object.fromEntries(tied.map((id) => [id, roll()]));
+  room.podiumRolls.push(values);
+  log(room, `Podium d20: ${tied.map((id) => `${room.players.find((player) => player.id === id)!.name} ${values[id]}`).join(', ')}.`);
+}
 export function validateCheckpoint(value: unknown): Room {
   const room = roomSchema.parse(value);
   const ids = new Set(room.players.map((player) => player.id));
+  if (room.phase !== 'finished' && room.podiumRolls.length) throw new Error('Podium rolls require a finished tournament.');
   if (ids.size !== room.players.length) throw new Error('Duplicate player IDs in checkpoint.');
   if (room.phase === 'lobby') {
     if (room.matches.length) throw new Error('Lobby checkpoint contains a bracket.');
@@ -191,5 +240,18 @@ export function validateCheckpoint(value: unknown): Room {
   if (room.round > finalRound) throw new Error('Invalid current round.');
   if (room.matches.some((match) => match.round < room.round && match.status !== 'done')) throw new Error('Earlier stage is incomplete.');
   if (room.phase === 'finished' && room.matches.at(-1)?.status !== 'done') throw new Error('Champion missing.');
+  if (room.rulesVersion === 2) {
+    for (let round = 0; round <= finalRound; round++) {
+      const stage = room.matches.filter((match) => match.round === round);
+      if (new Set(stage.map((match) => match.seed)).size !== 1) throw new Error('Stage prompt seeds do not match.');
+    }
+  }
+  const rolls = room.podiumRolls;
+  room.podiumRolls = [];
+  for (const roll of rolls) {
+    const expected = podiumContenders(room).sort();
+    if (!expected.length || Object.keys(roll).sort().join() !== expected.join()) throw new Error('Invalid podium roll participants.');
+    room.podiumRolls.push(roll);
+  }
   return room;
 }
