@@ -1,6 +1,9 @@
 import { VOCABULARY } from './vocabulary';
 
 export const DURATION = 30_000;
+export const DURATION_OPTIONS = [15_000, 30_000, 45_000, 60_000, 90_000, 120_000] as const;
+export const MIN_DURATION = DURATION_OPTIONS[0];
+export const MAX_DURATION = DURATION_OPTIONS.at(-1)!;
 export const PRESETS = ['Acorn', 'Harvest', 'Bonfire', 'Final feast'] as const;
 export type Difficulty = (typeof PRESETS)[number];
 const CONFIG = [
@@ -18,6 +21,7 @@ export interface Target {
 }
 export interface Board {
   now: number;
+  duration: number;
   seed: number;
   spawned: number;
   nextSpawn: number;
@@ -67,9 +71,9 @@ export function promptAt(seed: number, index: number, preset: Difficulty): strin
   if (cycle && items[0] === deck(cycle - 1).at(-1)) [items[0], items[1]] = [items[1], items[0]];
   return items[index % pool.length];
 }
-export function newBoard(seed: string): Board {
+export function newBoard(seed: string, duration: number = DURATION): Board {
   return {
-    now: 0, seed: hashSeed(seed), spawned: 0, nextSpawn: 0, targets: [],
+    now: 0, duration, seed: hashSeed(seed), spawned: 0, nextSpawn: 0, targets: [],
     selected: null, buffer: '', lives: 3, score: 0, streak: 0, best: 0,
     attempts: 0, correct: 0, cleared: 0, ended: false,
   };
@@ -80,20 +84,20 @@ export function multiplier(streak: number): number {
 export function stats(board: Board): Stats {
   return {
     score: board.score,
-    wpm: Math.round(board.correct / 5 / (DURATION / 60_000)),
+    wpm: Math.round(board.correct / 5 / (board.duration / 60_000)),
     accuracy: board.attempts ? Math.round((board.correct / board.attempts) * 100) : null,
     best: board.best,
   };
 }
 export function advance(board: Board, time: number, preset: Difficulty): void {
   if (board.ended) return;
-  const until = Math.max(board.now, Math.min(time, DURATION));
+  const until = Math.max(board.now, Math.min(time, board.duration));
   const config = CONFIG[PRESETS.indexOf(preset)];
   while (!board.ended) {
     const missAt = Math.min(...board.targets.map((target) => target.born + target.fall));
-    const next = Math.min(until, missAt, board.nextSpawn < DURATION ? board.nextSpawn : Infinity);
+    const next = Math.min(until, missAt, board.nextSpawn < board.duration ? board.nextSpawn : Infinity);
     board.now = next;
-    if (board.nextSpawn <= next && board.nextSpawn < DURATION) {
+    if (board.nextSpawn <= next && board.nextSpawn < board.duration) {
       const id = board.spawned++;
       board.targets.push({
         id, born: board.nextSpawn, fall: config.fall,
@@ -111,13 +115,13 @@ export function advance(board: Board, time: number, preset: Difficulty): void {
       if (target.id === board.selected) { board.selected = null; board.buffer = ''; }
     }
     board.targets = board.targets.filter((target) => target.born + target.fall > next);
-    board.ended = board.lives === 0 || next >= DURATION;
+    board.ended = board.lives === 0 || next >= board.duration;
     if (next >= until) break;
   }
 }
 export function input(board: Board, key: string, time: number, preset: Difficulty): void {
   advance(board, time, preset);
-  if (board.ended || time >= DURATION) return;
+  if (board.ended || time >= board.duration) return;
   if (key === 'Backspace') {
     board.buffer = board.buffer.slice(0, -1);
     if (!board.buffer) board.selected = null;

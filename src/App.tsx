@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent, type KeyboardEvent } from 'react';
-import { advance, DURATION, input, multiplier, newBoard, PRESETS, stats, type Board, type Difficulty } from './game/engine';
-import { defaultAvatar, finalStandings, placement, resolvePlayers, type AvatarConfig, type Match, type Room } from './tournament/model';
+import { advance, DURATION, DURATION_OPTIONS, input, MAX_DURATION, MIN_DURATION, multiplier, newBoard, PRESETS, stats, type Board, type Difficulty } from './game/engine';
+import { defaultAvatar, finalStandings, matchDuration, placement, resolvePlayers, type AvatarConfig, type Match, type Room } from './tournament/model';
 import { session } from './state/session';
 import { Avatar } from './ui/Avatar';
 import { Icon } from './ui/Icon';
@@ -92,7 +92,7 @@ export function App() {
   }
   function startPractice() {
     previous.current.score = 0;
-    setPractice({ board: newBoard(crypto.randomUUID()), start: Date.now() + 3000, preset: practicePreset });
+    setPractice({ board: newBoard(crypto.randomUUID(), room?.duration ?? DURATION), start: Date.now() + 3000, preset: practicePreset });
   }
   function type(key: string) {
     if (now < gameStart || !board || board.ended) return;
@@ -127,7 +127,7 @@ export function App() {
         <h1>Big fall energy.<br/>Fast fingers.<br/><em>One champion.</em></h1>
         <p className="hero-description">The leaves are falling. So are the words.<br/>Outtype your teammates in a cozy, chaotic<br className="desktop-break"/> race for the autumn crown.</p>
         <div className="hero-actions"><Button className="primary large" onClick={() => setView('join')}>Join the fun <Icon name="arrow"/></Button><Button className="secondary large" disabled={busy} onClick={() => void run(() => session.host())}>{busy ? 'Connecting...' : 'Host a game'}</Button></div>
-        <div className="hero-facts"><span><Icon name="bolt" size={16}/> {DURATION / 1000}-second showdowns</span><span><Icon name="crown" size={16}/> Up to 25 players</span></div>
+        <div className="hero-facts"><span><Icon name="bolt" size={16}/> {MIN_DURATION / 1000}-{MAX_DURATION / 1000} second showdowns</span><span><Icon name="crown" size={16}/> Up to 25 players</span></div>
         <Button className="text-button practice-link" onClick={startPractice}>Just warming up? Try a practice round <span aria-hidden="true">&#8599;</span></Button>
       </section>
       <section className="hero-art" aria-label="Autumn woodland typing party">
@@ -145,7 +145,7 @@ export function App() {
         <div className="combo-sticker"><Icon name="bolt" size={27}/><div>COZY COMBO<span>FALL HARD. TYPE FAST.</span></div></div>
         <div className="key-row" aria-hidden="true">{['F', 'A', 'L', 'L'].map((key, index) => <kbd key={index}>{key}</kbd>)}</div>
       </section>
-      <section className="how-strip"><div><b>01</b><span>Pick your woodland alter ego<small>A tiny face. A big competitive streak.</small></span></div><div><b>02</b><span>Catch words. Stack combos.<small>Three lives. {DURATION / 1000} seconds. No pressure.</small></span></div><div><b>03</b><span>Climb the bracket<small>One final crown. Endless bragging rights.</small></span></div></section>
+      <section className="how-strip"><div><b>01</b><span>Pick your woodland alter ego<small>A tiny face. A big competitive streak.</small></span></div><div><b>02</b><span>Catch words. Stack combos.<small>Three lives. The host sets the clock. No pressure.</small></span></div><div><b>03</b><span>Climb the bracket<small>One final crown. Endless bragging rights.</small></span></div></section>
       <Restore onRestore={(value) => void run(() => session.host(value))} busy={busy}/>
     </Screen> : <Screen key="join" className="join-layout">
       <section className="join-intro"><div className="eyebrow">YOUR AUTUMN ALTER EGO</div><h1>Small creature.<br/><em>Big type energy.</em></h1><p>Build your character, grab your room code,<br/>and settle into the lobby.</p><div className="avatar-preview"><Avatar config={avatar} size={230}/><span className="preview-shadow"/></div><span className="name-tag">{name || 'Your future champion'}</span></section>
@@ -168,7 +168,8 @@ export function App() {
       {room.phase === 'lobby' ? <div className="lobby-grid">
         <Roster room={room} host={state.role === 'host'} run={run}/>
         <aside className="sidebar">
-          <section className="panel rules-panel"><div className="mini-icon"><Icon name="leaf" size={26}/></div><h2>Here's the short version.</h2><p>Type falling words before they cross the line. Clear targets to build your combo. Keep your three lives.</p><ul><li><b>{DURATION / 1000} seconds</b> to make it count</li><li><b>Top score</b> advances from each match</li><li><b>Tied?</b> Let the d20 decide</li><li><b>One crown.</b> Bring your best keyboard.</li></ul>
+          <section className="panel rules-panel"><div className="mini-icon"><Icon name="leaf" size={26}/></div><h2>Here's the short version.</h2><p>Type falling words before they cross the line. Clear targets to build your combo. Keep your three lives.</p><ul><li><b>{(room.duration ?? DURATION) / 1000} seconds</b> to make it count</li><li><b>Top score</b> advances from each match</li><li><b>Tied?</b> Let the d20 decide</li><li><b>One crown.</b> Bring your best keyboard.</li></ul>
+            {state.role === 'host' && <TimerSelect value={room.duration ?? DURATION} onChange={(value) => void run(() => session.setDuration(value))}/>}
             {state.role === 'host' ? <Button className="primary full" disabled={busy || room.players.length < 2 || room.players.some((player) => !player.ready || !player.connected)} onClick={() => void run(() => session.draw())}>Lock roster & draw bracket<Icon name="arrow"/></Button> : <Button className="primary full" disabled={!state.connected} onClick={() => session.ready(!me?.ready)}>{me?.ready ? 'Actually, one moment...' : "I'm ready!"}</Button>}
             <p className="form-note">{state.role === 'host' ? 'Everyone must be connected and ready. Drawing locks the roster.' : 'The presenter starts the round. Stay on this tab.'}</p>
           </section><PracticeCard preset={practicePreset} setPreset={setPracticePreset} start={startPractice}/>{state.role === 'host' && <Backups room={room}/>}
@@ -193,7 +194,7 @@ export function App() {
         return <div className={id === me?.id ? 'you' : ''} key={id}><Avatar config={player.avatar} size={45}/><span>{player.name}{id === me?.id ? ' (you)' : ''}<small>{live?.score || 0} pts {!player.connected && ' / offline'}</small></span></div>;
       })}</div>}
       <GameBoard board={board} elapsed={now - gameStart} onKey={type} connected={!competitive || state.connected} preset={gamePreset} arming={match?.status === 'arming'}/>
-      {board.ended && <div className="result-banner"><Icon name="crown" size={28}/><div><h2>{board.lives === 0 ? 'Out of leaves. Still full of spirit.' : 'And... keyboards down!'}</h2><p>{board.score} points / {stats(board).wpm} WPM / {stats(board).accuracy ?? '--'}% accuracy. {competitive ? `Your score is locked. The match ends at ${DURATION / 1000} seconds.` : 'Practice scores never affect the tournament.'}</p></div>{!competitive && <Button className="primary" onClick={startPractice}>One more round</Button>}</div>}
+      {board.ended && <div className="result-banner"><Icon name="crown" size={28}/><div><h2>{board.lives === 0 ? 'Out of leaves. Still full of spirit.' : 'And... keyboards down!'}</h2><p>{board.score} points / {stats(board).wpm} WPM / {stats(board).accuracy ?? '--'}% accuracy. {competitive ? `Your score is locked. The match ends at ${board.duration / 1000} seconds.` : 'Practice scores never affect the tournament.'}</p></div>{!competitive && <Button className="primary" onClick={startPractice}>One more round</Button>}</div>}
       {!competitive && <div className="practice-presets"><label>Next practice difficulty<select value={practicePreset} onChange={(event) => setPracticePreset(event.target.value as Difficulty)}>{PRESETS.map((preset) => <option key={preset}>{preset}</option>)}</select></label></div>}
     </Screen>}
     </AnimatePresence>
@@ -247,8 +248,12 @@ function HostControls({ room, busy, run }: { room: Room; busy: boolean; run: (ac
   const next = room.matches.find((match) => match.round === room.round + (allDone ? 1 : 0));
   return <section className="host-controls panel"><div><span className="eyebrow">YOU'RE RUNNING THE SHOW</span><h2>{allDone ? 'Ready for the next chapter?' : `Stage ${room.round + 1}: ${active ? 'the leaves are flying' : 'ready when you are'}`}</h2></div>
     {(allDone || pending) && !active && next && <label>Stage difficulty<select aria-label="Stage difficulty" value={next.preset} onChange={(event) => void run(() => session.setPreset(event.target.value as Difficulty, next.round))}>{PRESETS.map((item) => <option key={item}>{item}</option>)}</select></label>}
+    {(allDone || pending) && !active && next && <TimerSelect label="Stage timer" value={matchDuration(next)} onChange={(value) => void run(() => session.setDuration(value, next.round))}/>}
     <Button className="primary" disabled={busy || (!allDone && !pending) || !next} onClick={() => void run(() => session.start())}>{allDone ? 'Start next stage' : 'Start pending matches'}<Icon name="arrow"/></Button>
   </section>;
+}
+function TimerSelect({ value, onChange, label = 'Round timer' }: { value: number; onChange: (value: number) => void; label?: string }) {
+  return <label>{label}<select aria-label={label} value={value} onChange={(event) => onChange(Number(event.target.value))}>{DURATION_OPTIONS.map((item) => <option key={item} value={item}>{item / 1000} seconds</option>)}</select></label>;
 }
 function Bracket({ room, host, now, run }: { room: Room; host: boolean; now: number; run: (action: () => void) => Promise<void> }) {
   const rounds = Array.from(new Set(room.matches.map((match) => match.round)));
@@ -260,7 +265,7 @@ function MatchCard({ room, match, host, now, run }: { room: Room; match: Match; 
   const ids = match.players.length ? match.players : resolvePlayers(room, match);
   const roll = match.rolls.at(-1);
   return <article className={`match-card ${match.status}`} aria-label={`Match ${match.id}`}>
-    <div className="match-meta"><span>{match.id.toUpperCase()} {match.sources.length === 3 && <b>TRIO</b>}</span><span>{match.status === 'playing' ? `${Math.max(0, Math.ceil((match.startAt + DURATION - now) / 1000))}s / LIVE` : match.status === 'arming' ? 'CONNECTING' : match.status === 'scheduled' ? 'GET READY' : match.status === 'tie' ? 'D20 TIE-BREAK' : match.status === 'done' ? 'FINAL' : 'UP NEXT'}</span></div>
+    <div className="match-meta"><span>{match.id.toUpperCase()} {match.sources.length === 3 && <b>TRIO</b>}</span><span>{match.status === 'playing' ? `${Math.max(0, Math.ceil((match.startAt + matchDuration(match) - now) / 1000))}s / LIVE` : match.status === 'arming' ? 'CONNECTING' : match.status === 'scheduled' ? 'GET READY' : match.status === 'tie' ? 'D20 TIE-BREAK' : match.status === 'done' ? 'FINAL' : 'UP NEXT'}</span></div>
     {Array.from({ length: match.sources.length }, (_, index) => {
       const player = room.players.find((item) => item.id === ids[index]);
       const score = player ? match.results[player.id]?.score ?? session.liveStats(player.id)?.score ?? session.getSnapshot().live?.[player.id]?.score : undefined;
@@ -284,7 +289,7 @@ function Leaderboard({ room }: { room: Room }) {
 }
 function GameBoard({ board, elapsed, onKey, connected, preset, arming = false }: { board: Board; elapsed: number; onKey: (key: string) => void; connected: boolean; preset: Difficulty; arming?: boolean }) {
   const ref = useRef<HTMLInputElement>(null);
-  const time = Math.max(0, Math.ceil((DURATION - Math.max(0, elapsed)) / 1000));
+  const time = Math.max(0, Math.ceil((board.duration - Math.max(0, elapsed)) / 1000));
   useEffect(() => { ref.current?.focus(); }, [preset, board.seed]);
   function keyboard(event: KeyboardEvent<HTMLInputElement>) {
     if (event.ctrlKey || event.metaKey || event.altKey || event.nativeEvent.isComposing || event.repeat) return;

@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { advance, DURATION, input, newBoard, stats, type Board, type Difficulty } from '../game/engine';
+import { advance, DURATION_OPTIONS, input, newBoard, stats, type Board, type Difficulty } from '../game/engine';
 import {
-  defaultAvatar, draw, emptyRoom, finish, log, resolvePlayers, rollDice, rollPodium,
+  defaultAvatar, draw, emptyRoom, finish, log, matchDuration, resolvePlayers, rollDice, rollPodium,
   validateCheckpoint, type AvatarConfig, type Room,
 } from '../tournament/model';
 import { createTransport, type RoomTransport, type RoomConnection } from '../network/transport';
@@ -226,7 +226,8 @@ export class Session {
   ready(ready: boolean) { this.send({ type: 'ready', ready }); }
   key(key: string, at: number) {
     if (!this.snapshot.connected || this.pending.length >= 100 || this.seq >= 20000) return;
-    const event: KeyEvent = { key, at: Math.max(0, Math.min(DURATION, at)), seq: ++this.seq };
+    const match = this.snapshot.room?.matches.find((item) => item.id === this.activeMatch);
+    const event: KeyEvent = { key, at: Math.max(0, Math.min(matchDuration(match ?? {}), at)), seq: ++this.seq };
     this.pending.push(event);
     this.flush();
   }
@@ -313,7 +314,8 @@ export class Session {
       for (const event of message.events) {
         if (event.seq <= runtime.accepted) continue;
         if (event.seq !== runtime.accepted + 1) break;
-        if (now > match.startAt + DURATION + LAG || now < match.startAt || event.at >= DURATION) continue;
+        const duration = matchDuration(match);
+        if (now > match.startAt + duration + LAG || now < match.startAt || event.at >= duration) continue;
         const at = Math.max(runtime.board.now, runtime.queue.at(-1)?.at || 0, Math.min(event.at, now - match.startAt + 50));
         runtime.queue.push({ ...event, at });
         runtime.accepted = event.seq;
@@ -380,6 +382,20 @@ export class Session {
     }
     this.persist();
   }
+  setDuration(duration: number, round = this.room?.round) {
+    if (!this.room) return;
+    if (!(DURATION_OPTIONS as readonly number[]).includes(duration)) throw new Error('Choose one of the listed round timers.');
+    if (this.room.phase === 'lobby') {
+      this.room.duration = duration;
+    } else {
+      const matches = this.room.matches.filter((item) => item.round === round);
+      if (!matches.length) throw new Error('Stage not found.');
+      if (matches.some((match) => match.status !== 'pending')) throw new Error('The timer is locked once the stage starts.');
+      for (const match of matches) match.duration = duration;
+    }
+    log(this.room, `Round timer set to ${duration / 1000} seconds.`);
+    this.persist();
+  }
   start() {
     const room = this.room;
     if (!room || room.phase !== 'tournament') return;
@@ -401,7 +417,7 @@ export class Session {
       match.status = 'arming';
       match.startAt = startAt;
       for (const id of match.players) this.runtimes.set(id, {
-        board: newBoard(match.seed), queue: [], accepted: 0, applied: 0, ackStart: false,
+        board: newBoard(match.seed, matchDuration(match)), queue: [], accepted: 0, applied: 0, ackStart: false,
       });
     }
     this.persist();
@@ -494,7 +510,8 @@ export class Session {
         match.status = 'playing';
       }
       if (match.status !== 'playing') continue;
-      const until = Math.max(0, Math.min(DURATION, now - match.startAt - LAG));
+      const duration = matchDuration(match);
+      const until = Math.max(0, Math.min(duration, now - match.startAt - LAG));
       for (const id of match.players) {
         const runtime = this.runtimes.get(id)!;
         while (runtime.queue.length && runtime.queue[0].at <= until) {
@@ -504,7 +521,7 @@ export class Session {
         }
         advance(runtime.board, until, match.preset);
       }
-      if (until >= DURATION) {
+      if (until >= duration) {
         finish(room, match, Object.fromEntries(match.players.map((id) => [id, stats(this.runtimes.get(id)!.board)])));
         checkpoint = true;
       }

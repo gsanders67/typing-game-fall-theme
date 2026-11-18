@@ -54,7 +54,7 @@ For a subpath, add `-e PUBLIC_URL=https://your-domain.example/typing` to `docker
 1. Rehearse on the real devices/networks, including all 25 players, simultaneous typing, reconnections, and backup restoration.
 2. Keep the presenter on a powered, awake computer with its tab visible. The server routes room messages; the presenter still validates typing, runs the authoritative game simulation, and owns tournament controls/checkpoints.
 3. Players choose names and woodland avatars, join, practice if wanted, and mark themselves ready. The presenter can remove lobby players.
-4. **Lock roster & draw bracket** prevents late competitors. Choose each stage's preset and start; all players acknowledge readiness before the shared five-second countdown.
+4. **Lock roster & draw bracket** prevents late competitors. Choose each stage's preset and round timer, then start; all players acknowledge readiness before the shared five-second countdown.
 5. Resolve score ties with d20 rolls, start subsequent stages, and export results/private backups. A 25-player field progresses **25 -> 12 -> 6 -> 3 -> 1**.
 6. After the final, resolve any remaining podium ties, then celebrate the top three. Use **Bracket & standings** to revisit results or replay controls.
 
@@ -64,13 +64,13 @@ Odd stages use pairs plus one trio; only one player advances from each match. Pa
 
 ## Rules
 
-- Each competitive or practice match runs for 30 seconds with three lives. A target reaching the kill line removes one life. Zero lives locks that player's score, but opponents continue.
+- Each match runs for a host-chosen timer (15, 30, 45, 60, 90, or 120 seconds; default 30) with three lives. The presenter sets it in the lobby and can change it per stage before that stage starts. Practice uses the room's timer. A target reaching the kill line removes one life. Zero lives locks that player's score, but opponents continue.
 - Several targets fall at once. The first letter selects the matching target closest to the line; ties use spawn order. Selection stays locked until completion, expiration, or clearing the input buffer.
 - Complete a target automatically without Enter. Case is ignored. Phrase spaces must be entered; punctuation is excluded. Backspace corrects a typo. Paste/held-key repeat is not accepted.
 - Completed letters award 10 points each; spaces and incomplete targets award nothing. Every five consecutive clears increases the multiplier by 0.5 from 1x to a 3x cap; the sixth clear first earns 1.5x.
 - Typos and missed targets reset the streak. **Typos never cost a life.**
-- Every match in a stage receives identical seeded content, timing, preset, and logical geometry. Each stage has a fresh shuffled order. Xbox/gaming and autumn vocabulary is mixed into each tier, progressing from short words to longer words and original phrases. Each pool contains at least 60 unique prompts; a prompt cannot repeat until its pool is exhausted, including across deck boundaries.
-- WPM is correct character entries / 5 / round minutes: for a 30-second round, correct character entries / 2.5. The denominator remains the full round even after early life loss. Accuracy excludes Backspace and displays the last completed round on the leaderboard. Practice never affects standings.
+- Every match in a stage receives identical seeded content, timing, preset, and logical geometry. Each stage has a fresh shuffled order. Xbox/gaming, autumn, and Gen Z meme vocabulary (`MEME_WORDS` in `src/game/vocabulary.ts`, e.g. "six seven", "rizz", "let him cook") is mixed into each tier, progressing from short words to longer words and original phrases. Each pool contains at least 60 unique prompts; a prompt cannot repeat until its pool is exhausted, including across deck boundaries.
+- WPM is correct character entries / 5 / round minutes: for the default 30-second round, correct character entries / 2.5. The denominator remains the full round even after early life loss. Accuracy excludes Backspace and displays the last completed round on the leaderboard. Practice never affects standings.
 
 ## Podium and winner awards
 
