@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { advance, DURATION, input, multiplier, newBoard, PRESETS, promptAt, stats, type Board } from './engine';
-import { VOCABULARY } from './vocabulary';
+import { MEME_WORDS, VOCABULARY } from './vocabulary';
 
 function target(board: Board, text = 'game') {
   board.targets = [{ id: board.spawned++, text, born: board.now, fall: 9000, lane: 0.3 }];
@@ -89,6 +89,19 @@ describe('typing rules', () => {
     board.ended = true;
     board.now = 10000;
     expect(stats(board).wpm).toBe(20);
+  });
+  it('ends the round and scales WPM to a host-chosen duration', () => {
+    const board = newBoard('custom', 60_000);
+    board.nextSpawn = 60_000;
+    advance(board, 45_000, 'Acorn');
+    expect(board.ended).toBe(false);
+    advance(board, 60_000, 'Acorn');
+    expect(board.ended).toBe(true);
+    board.correct = 50;
+    expect(stats(board).wpm).toBe(10);
+  });
+  it.each(PRESETS)('mixes Gen Z meme words into %s', (preset) => {
+    expect(MEME_WORDS[preset].every((word) => VOCABULARY[preset].includes(word))).toBe(true);
   });
   it.each(PRESETS)('uses diverse shuffled decks without repeats or invalid input in %s', (preset) => {
     const pool = VOCABULARY[preset];

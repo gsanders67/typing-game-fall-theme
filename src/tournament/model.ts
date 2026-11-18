@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PRESETS, type Stats, randomAt, hashSeed } from '../game/engine';
+import { DURATION, MAX_DURATION, MIN_DURATION, PRESETS, type Stats, randomAt, hashSeed } from '../game/engine';
 
 export const avatarSchema = z.object({
   animal: z.enum(['fox', 'bear', 'frog', 'owl']),
@@ -32,6 +32,7 @@ const matchSchema = z.object({
   startAt: z.number().nonnegative(),
   seed: z.string().max(80),
   preset: z.enum(PRESETS),
+  duration: z.number().int().min(MIN_DURATION).max(MAX_DURATION).optional(),
   results: z.record(z.string().uuid(), statsSchema),
   winner: z.string().uuid().optional(),
   rolls: z.array(z.record(z.string().uuid(), z.number().int().min(1).max(20))).max(1000),
@@ -46,12 +47,16 @@ export const roomSchema = z.object({
   players: z.array(playerSchema).max(25),
   matches: z.array(matchSchema).max(24),
   round: z.number().int().min(0).max(4),
+  duration: z.number().int().min(MIN_DURATION).max(MAX_DURATION).optional(),
   audit: z.array(z.string().max(200)).max(500),
   podiumRolls: z.array(z.record(z.string().uuid(), z.number().int().min(1).max(20))).max(1000).default([]),
 });
 export type Room = z.infer<typeof roomSchema>;
 export function emptyRoom(code: string): Room {
-  return { version: 1, rulesVersion: 2, code, revision: 0, phase: 'lobby', players: [], matches: [], round: 0, audit: [], podiumRolls: [] };
+  return { version: 1, rulesVersion: 2, code, revision: 0, phase: 'lobby', players: [], matches: [],   round: 0, duration: DURATION, audit: [], podiumRolls: [] };
+  }
+  export function matchDuration(match: Pick<Match, 'duration'>): number {
+    return match.duration ?? DURATION;
 }
 export function log(room: Room, text: string) {
   room.audit = [...room.audit.slice(-499), text.slice(0, 200)];
@@ -79,7 +84,7 @@ export function draw(room: Room, seed: string) {
         id, round, sources: group, players: round === 0 ? group : [], status: 'pending',
         startAt: 0, seed: `${seed}-stage-${round}`,
         preset: PRESETS[stages === 1 ? 3 : Math.round(round * 3 / (stages - 1))],
-        results: {}, rolls: [],
+                duration: room.duration ?? DURATION,        results: {}, rolls: [],
       });
       next.push(`winner:${id}`);
       cursor += size;
