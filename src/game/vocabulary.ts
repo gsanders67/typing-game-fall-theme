@@ -2,9 +2,9 @@ import type { Difficulty } from './engine';
 
 // Gen Z meme slang mixed into every difficulty. Only letters and spaces can be typed, so "6 7" is spelled out.
 export const MEME_WORDS: Record<Difficulty, readonly string[]> = {
-  Acorn: `rizz sigma slay sus yeet bet cap ohio aura bruh simp npc mid ick drip lit fr ong based tuff unc mog vibe yap glaze era sheesh ratio stan salty chud chad oof yikes cope bozo nerd goat`.split(' '),
-  Harvest: `skibidi bussin delulu cooked goated lowkey highkey periodt bestie boujee rizzler mewing yapping glazing chopped crashout demure brainrot gigachad griddy gatekeep pookie slaps mogging nocap sixseven ghosted cringe iykyk lookmaxing smoothbrain bigbrain copium hopium skillissue gigabrain sayless`.split(' '),
-  Bonfire: `skibiditoilet sigmagrindset maincharacter touchgrass fanumtax vibecheck rentfree looksmaxxing aurafarming letemcook itsgiving ohiorizz brainrotted mewingstreak rizzlerking delulusolulu npcenergy sigmamale goatedwiththesauce sixsevensixseven chadmoment bruhmoment smoothbrained beforegtavi galaxybrain copiumoverdose emotionaldamage wearesoback itissoover`.split(' '),
+  Acorn: `rizz sigma slay sus yeet bet cap ohio aura bruh simp npc mid ick drip lit fr ong based tuff unc mog vibe yap glaze era sheesh ratio stan salty chud chad oof yikes cope bozo nerd goat pog yoink bonk bro fam rekt noob gg ez oop skrt zesty mood flex lag afk brb lol lmao blud`.split(' '),
+  Harvest: `skibidi bussin delulu cooked goated lowkey highkey periodt bestie boujee rizzler mewing yapping glazing chopped crashout demure brainrot gigachad griddy gatekeep pookie slaps mogging nocap sixseven ghosted cringe iykyk lookmaxing smoothbrain bigbrain copium hopium skillissue gigabrain sayless girlboss unhinged feral gremlin rizzless poggers yeeted rickroll stonks doomscroll ragequit noscope clutch sendit sweaty tryhard`.split(' '),
+  Bonfire: `skibiditoilet sigmagrindset maincharacter touchgrass fanumtax vibecheck rentfree looksmaxxing aurafarming letemcook itsgiving ohiorizz brainrotted mewingstreak rizzlerking delulusolulu npcenergy sigmamale goatedwiththesauce sixsevensixseven chadmoment bruhmoment smoothbrained beforegtavi galaxybrain copiumoverdose emotionaldamage wearesoback itissoover bombasticsideeye grimaceshake ohiofinalboss rickrolled stonksonlyup doomscrolling ragequitting thisisfine griddyonthem amogus builtdifferent sidequestacquired keyboardwarrior certifiedgamer`.split(' '),
   'Final feast': [
     'six seven', 'no cap fr fr', 'let him cook', 'touch some grass', 'its giving main character',
     'skibidi toilet rizz', 'that is so sigma', 'minus a thousand aura', 'bro is so cooked', 'lowkey bussin',
@@ -12,10 +12,17 @@ export const MEME_WORDS: Record<Difficulty, readonly string[]> = {
     'six seven six seven', 'only in ohio', 'mewing streak unlocked', 'delulu is the solulu', 'pookie bear energy',
     'big yikes bestie', 'stop the yapping', 'ate and left no crumbs', 'that is lowkey sus', 'goated with the sauce',
     'certified rizzler', 'crashout incoming', 'aura farming season', 'npc behavior detected', 'it is giving fall vibes',
-        'chad moment', 'bruh moment', 'bruh moment twenty seventy seven', 'before gta vi', 'smooth brain energy',
-        'certified chud behavior', 'skill issue detected', 'emotional damage', 'galaxy brain move', 'big brain time',
-        'massive cope', 'ratio plus l plus bozo', 'we are so back', 'it is so over', 'average lookmaxing enjoyer',
-        'one more round before gta vi', 'caught in four k', 'say less', 'main character moment', 'touch grass immediately',
+    'chad moment', 'bruh moment', 'bruh moment twenty seventy seven', 'before gta vi', 'smooth brain energy',
+    'certified chud behavior', 'skill issue detected', 'emotional damage', 'galaxy brain move', 'big brain time',
+    'massive cope', 'ratio plus l plus bozo', 'we are so back', 'it is so over', 'average lookmaxing enjoyer',
+    'one more round before gta vi', 'caught in four k', 'say less', 'main character moment', 'touch grass immediately',
+    'never gonna give you up', 'this is fine', 'press f to pay respects', 'it is wednesday my dudes', 'stonks only go up',
+    'bombastic side eye', 'the grimace shake got me', 'one does not simply type', 'do a barrel roll', 'the cake is a lie',
+    'all your base are belong to us', 'when the imposter is sus', 'red flag behavior', 'blud has no rizz', 'my wifi said no',
+    'lag made me do it', 'i was not lagging', 'gg ez no re', 'blud thinks he is him', 'rizz up the leaderboard',
+    'my keyboard is cooked', 'mom said one more game', 'speedrun any percent', 'side quest acquired', 'main quest ignored',
+    'ohio final boss', 'built different', 'sir this is a typing game', 'unhinged typing behavior', 'keyboard warrior mode',
+    'not me typing this fast', 'the audacity', 'hold my controller', 'it was the lag i swear', 'certified gamer moment',
   ],
 };
 
