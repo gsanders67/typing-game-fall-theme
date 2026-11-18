@@ -4,7 +4,7 @@ import type { Difficulty } from './engine';
 export const MEME_WORDS: Record<Difficulty, readonly string[]> = {
   Acorn: `rizz sigma slay sus yeet bet cap ohio aura bruh simp npc mid ick drip lit fr ong based tuff unc mog vibe yap glaze era sheesh ratio stan salty chud chad oof yikes cope bozo nerd goat`.split(' '),
   Harvest: `skibidi bussin delulu cooked goated lowkey highkey periodt bestie boujee rizzler mewing yapping glazing chopped crashout demure brainrot gigachad griddy gatekeep pookie slaps mogging nocap sixseven ghosted cringe iykyk lookmaxing smoothbrain bigbrain copium hopium skillissue gigabrain sayless`.split(' '),
-  Bonfire: `skibiditoilet sigmagrindset maincharacter touchgrass fanumtax vibecheck rentfree looksmaxxing aurafarming letemcook itsgiving ohiorizz brainrotted mewingstreak rizzlerking delulusolulu npcenergy sigmamale goatedwiththesauce sixsevensixseven chadmoment bruhmoment smoothbrained beforegtasix galaxybrain copiumoverdose emotionaldamage wearesoback itissoover`.split(' '),
+  Bonfire: `skibiditoilet sigmagrindset maincharacter touchgrass fanumtax vibecheck rentfree looksmaxxing aurafarming letemcook itsgiving ohiorizz brainrotted mewingstreak rizzlerking delulusolulu npcenergy sigmamale goatedwiththesauce sixsevensixseven chadmoment bruhmoment smoothbrained beforegtavi galaxybrain copiumoverdose emotionaldamage wearesoback itissoover`.split(' '),
   'Final feast': [
     'six seven', 'no cap fr fr', 'let him cook', 'touch some grass', 'its giving main character',
     'skibidi toilet rizz', 'that is so sigma', 'minus a thousand aura', 'bro is so cooked', 'lowkey bussin',
@@ -12,10 +12,10 @@ export const MEME_WORDS: Record<Difficulty, readonly string[]> = {
     'six seven six seven', 'only in ohio', 'mewing streak unlocked', 'delulu is the solulu', 'pookie bear energy',
     'big yikes bestie', 'stop the yapping', 'ate and left no crumbs', 'that is lowkey sus', 'goated with the sauce',
     'certified rizzler', 'crashout incoming', 'aura farming season', 'npc behavior detected', 'it is giving fall vibes',
-        'chad moment', 'bruh moment', 'bruh moment twenty seventy seven', 'before gta six', 'smooth brain energy',
+        'chad moment', 'bruh moment', 'bruh moment twenty seventy seven', 'before gta vi', 'smooth brain energy',
         'certified chud behavior', 'skill issue detected', 'emotional damage', 'galaxy brain move', 'big brain time',
         'massive cope', 'ratio plus l plus bozo', 'we are so back', 'it is so over', 'average lookmaxing enjoyer',
-        'one more round before gta six', 'caught in four k', 'say less', 'main character moment', 'touch grass immediately',
+        'one more round before gta vi', 'caught in four k', 'say less', 'main character moment', 'touch grass immediately',
   ],
 };
 
